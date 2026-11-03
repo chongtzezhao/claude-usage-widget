@@ -74,15 +74,25 @@ async function main() {
   }
 
   const folder = scriptFolder();
-  const target = folder.fm.joinPath(folder.dir, TARGET_NAME);
-  folder.fm.writeString(target, code);
+  let target = folder.fm.joinPath(folder.dir, TARGET_NAME);
+  let cloud = folder.cloud;
+  try {
+    folder.fm.writeString(target, code);
+  } catch (e) {
+    // FileManager.iCloud() can exist while its container is unavailable
+    // (iCloud disabled / not signed in). Fall back to the local script folder.
+    const local = FileManager.local();
+    target = local.joinPath(local.documentsDirectory(), TARGET_NAME);
+    local.writeString(target, code);
+    cloud = false;
+  }
 
   const alert = new Alert();
   alert.title = "Installed";
   alert.message =
     TARGET_NAME +
     " was saved to Scriptable" +
-    (folder.cloud ? " (iCloud folder)" : " (local folder)") +
+    (cloud ? " (iCloud folder)" : " (local folder)") +
     ".\n\nClose this alert, open the script list, and run " +
     TARGET_NAME.replace(/\.js$/, "") +
     " to sign in.\n\nSource: " +

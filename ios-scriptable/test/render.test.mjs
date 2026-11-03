@@ -186,6 +186,13 @@ test("runtime guard detects Scriptable by its globals, not by module being absen
   assert.doesNotMatch(source, /if \(typeof module === "undefined"\)/);
 });
 
+test("widget render path avoids APIs Scriptable does not support in widgets", () => {
+  const source = readFileSync(new URL("../claude-usage-widget.js", import.meta.url), "utf8");
+  // Device.isUsingDarkAppearance() is documented as not supported in widgets;
+  // drawing must use concrete colors instead.
+  assert.doesNotMatch(source, /Device\.isUsingDarkAppearance/);
+});
+
 test("showAlert accepts { label } objects and plain strings", async () => {
   const previous = globalThis.Alert;
   globalThis.Alert = MockAlert;

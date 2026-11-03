@@ -40,6 +40,7 @@ A 403 is *not* treated as a logout, so you should not have to re-authenticate ju
 1. Tap the widget → **Refresh now** (or open the script and run it).
 2. Wait — iOS schedules widget refreshes roughly every 15 minutes, but it is a *request*, not a guarantee. Low Power Mode, low battery, Focus modes, a rarely viewed widget or a busy device can delay refreshes substantially. Plugging in and opening the app once usually prompts a refresh.
 3. Check that the provider is still signed in (see the first section). After a soft failure the widget deliberately keeps the old numbers rather than blanking out.
+4. A Shortcut that runs the script with `refresh` updates the cache, but iOS still chooses when to redraw the widget — it may take until the next scheduled refresh. Opening the app or tapping the widget usually nudges it.
 
 If the dot is showing but the numbers are correct, nothing is broken — the dot only reports age.
 
@@ -52,7 +53,7 @@ If the dot is showing but the numbers are correct, nothing is broken — the dot
 1. Run the script → **Sign in again** → the provider.
 2. Complete the login and **keep the signed-in page open until it has fully loaded**, then tap **Done**. The cookie is harvested while you are on a page of that provider.
 3. Try **Refresh now** immediately afterwards. If it succeeds, the next widget render has fresh data.
-4. If it still says "Limited refresh", the cookie is `HttpOnly` and was not surfaced in this Scriptable/iOS version. You can keep using the widget in snapshot mode: open the app and **Refresh now** whenever you want new numbers.
+4. If it still says "Limited refresh", the cookie is `HttpOnly` and was not surfaced in this Scriptable/iOS version. This is common: WebKit often hides the `Cookie` header from `shouldAllowRequest`. You can keep using the widget in snapshot mode: open the app and **Refresh now** whenever you want new numbers.
 
 ## Not signed in on a new device, or after restoring from iCloud
 

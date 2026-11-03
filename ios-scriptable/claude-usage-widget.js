@@ -87,8 +87,6 @@ const PACE_SYMBOLS = {
 // Colours from res/values/colors.xml and values-night/colors.xml.
 const COLORS = {
   accent: { claude: { light: "#D97757", dark: "#E8896B" }, codex: { light: "#10A37F", dark: "#2FBF9A" } },
-  track: { light: "#DEDEDE", dark: "#3E3E3E" }, // pre-blended alpha track (see drawBar)
-  tick: { light: "#A6A6A6", dark: "#7A7A7A" },  // pre-blended on-pace tick
   stale: { light: "#E0A000", dark: "#FFC233" },
   pace: {
     under: { light: "#3B82F6", dark: "#60A5FA" },
@@ -105,23 +103,6 @@ const COLORS = {
 // Pure helpers (exported for Node tests). No Scriptable APIs below this point
 // until the "Device & storage" section.
 // ---------------------------------------------------------------------------
-
-/** Parses "#RRGGBB" into [r, g, b]; returns [128, 128, 128] on failure. */
-function hexToRgb(hex) {
-  const m = /^#?([0-9a-fA-F]{6})$/.exec(String(hex || ""));
-  if (!m) return [128, 128, 128];
-  const n = parseInt(m[1], 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-/** Blends a foreground hex at `alpha` over a background hex; used to avoid
- *  alpha-channel Color APIs for DrawContext fills. */
-function blendHex(fgHex, alpha, bgHex) {
-  const fg = hexToRgb(fgHex);
-  const bg = hexToRgb(bgHex);
-  const out = fg.map((c, i) => Math.round(bg[i] + alpha * (c - bg[i])));
-  return "#" + out.map((c) => ("0" + Math.max(0, Math.min(255, c)).toString(16)).slice(-2)).join("");
-}
 
 /**
  * Parses RFC3339 / ISO-8601 timestamps with fractional seconds (up to 9
@@ -963,7 +944,10 @@ async function fetchClaude(opts) {
 
   let result = await claudeGetUsage(orgId, sessionKey, cfClearance, userAgent, timeoutSeconds);
   // A deleted/rotated org id would otherwise 404 forever; rediscover once.
-  if (result.kind === "soft" && result.reason === "http-404") {
+  // Skip this extra round-trip in a widget run, where the whole live fetch is
+  // capped at widgetFetchTimeoutSeconds per request.
+  if (result.kind === "soft" && result.reason === "http-404" &&
+      timeoutSeconds > CONFIG.widgetFetchTimeoutSeconds) {
     keyRemove(KEYS.claude.orgId);
     const disc = await discoverClaudeOrg(sessionKey, cfClearance, userAgent, timeoutSeconds);
     if (disc.kind === "ok") {
@@ -1472,10 +1456,12 @@ function widgetText(stack, str, opts) {
 
 /**
  * Draws a usage bar with DrawContext: rounded track + rounded fill plus a
- * thin on-pace tick at the elapsed fraction. Track/tick colours are
- * pre-blended against the widget background (see blendHex) so no
- * alpha-channel Colour APIs are needed. Fixed pixel size, never stretched
- * via resizable: the caller sets WidgetImage.imageSize to the drawn size.
+ * thin on-pace tick at the elapsed fraction. DrawContext colours must be
+ * concrete, and the Device dark-appearance API is explicitly unsupported in
+ * widgets, so the track/tick use neutral translucent grey (readable on both
+ * light and dark backgrounds) and the fill uses the provider accent.
+ * Fixed pixel size, never stretched via resizable: the caller sets
+ * WidgetImage.imageSize to the drawn size.
  */
 function drawBarImage(pct, width, height, provider, elapsed) {
   const scale = 3;
@@ -1485,21 +1471,18 @@ function drawBarImage(pct, width, height, provider, elapsed) {
   dc.size = new Size(W, H);
   dc.opaque = false;
 
-  const dark = Device.isUsingDarkAppearance();
-  const bg = dark ? COLORS.background.dark : COLORS.background.light;
-
   // Track.
   const pTrack = new Path();
   pTrack.addRoundedRect(new Rect(0, 0, W, H), H / 2, H / 2);
   dc.addPath(pTrack);
-  dc.setFillColor(new Color(blendHex(dark ? "#FFFFFF" : "#000000", dark ? 0.20 : 0.13, bg)));
+  dc.setFillColor(new Color(0.5, 0.5, 0.5, 0.26));
   dc.fillPath();
 
   // Fill.
   const frac = Math.min(1, Math.max(0, (Number(pct) || 0) / 100));
   if (frac > 0) {
     const fillW = Math.max(H, Math.round(W * frac));
-    const accent = dark ? COLORS.accent[provider].dark : COLORS.accent[provider].light;
+    const accent = COLORS.accent[provider].light;
     const pFill = new Path();
     pFill.addRoundedRect(new Rect(0, 0, fillW, H), H / 2, H / 2);
     dc.addPath(pFill);
@@ -1514,7 +1497,7 @@ function drawBarImage(pct, width, height, provider, elapsed) {
     const pTick = new Path();
     pTick.addRect(new Rect(tickX, 0, tickW, H));
     dc.addPath(pTick);
-    dc.setFillColor(new Color(blendHex(dark ? "#FFFFFF" : "#000000", 0.40, bg)));
+    dc.setFillColor(new Color(0.5, 0.5, 0.5, 0.55));
     dc.fillPath();
   }
 
@@ -1522,7 +1505,7 @@ function drawBarImage(pct, width, height, provider, elapsed) {
 }
 
 /** Small circular dot (stale indicator), drawn the same way as the bars. */
-function drawDotImage(diameter, hexPair, dark) {
+function drawDotImage(diameter, color) {
   const scale = 3;
   const D = Math.round(diameter * scale);
   const dc = new DrawContext();
@@ -1531,7 +1514,7 @@ function drawDotImage(diameter, hexPair, dark) {
   const p = new Path();
   p.addEllipse(new Rect(0, 0, D, D));
   dc.addPath(p);
-  dc.setFillColor(new Color(dark ? hexPair.dark : hexPair.light));
+  dc.setFillColor(color);
   dc.fillPath();
   return dc.getImage();
 }
@@ -1662,8 +1645,7 @@ function addProviderHeader(stack, state, compact) {
         size: 8, color: staleColor(), lineLimit: 1, scale: 0.7,
       });
     }
-    const dark = Device.isUsingDarkAppearance();
-    const dot = row.addImage(drawDotImage(7, COLORS.stale, dark));
+    const dot = row.addImage(drawDotImage(7, new Color(COLORS.stale.dark)));
     dot.imageSize = new Size(7, 7);
   }
 }
@@ -2007,7 +1989,9 @@ async function opportunisticLiveRefresh(cache, providerIds, now) {
     if (id === "codex" && !hasCodexCreds()) continue;
 
     jobs.push((async function (providerId) {
-      const timeoutMs = CONFIG.widgetFetchTimeoutSeconds * 1000;
+      // fetch() may need two requests (org discovery + usage, or token mint +
+      // usage), so give the outer budget room for two inner timeouts.
+      const timeoutMs = CONFIG.widgetFetchTimeoutSeconds * 2000 + 1000;
       // Run both providers concurrently so the widget stays inside WidgetKit's
       // refresh budget even when both are stale.
       const result = providerId === "claude"
@@ -2154,9 +2138,11 @@ async function refreshAllSilently() {
   const cache = loadCache();
   for (let i = 0; i < providers.length; i++) {
     const id = providers[i];
+    // No hidden WebView here: this runs in the Shortcuts extension context,
+    // where an unpresented WebView may never finish. Cache refresh only.
     const fetcher = id === "claude"
-      ? fetchClaude({ allowWebviewRepair: true })
-      : fetchCodex({ allowWebviewRepair: true });
+      ? fetchClaude({ allowWebviewRepair: false })
+      : fetchCodex({ allowWebviewRepair: false });
     const result = await withTimeout(fetcher, 90000, { kind: "soft", reason: "timeout" });
     cache[id] = id === "claude"
       ? mergeClaudeSnapshot(cache[id], result, Date.now())

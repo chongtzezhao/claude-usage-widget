@@ -124,7 +124,7 @@ Prefer no taps? Make a Shortcut that runs the script with the text `refresh`:
 
 1. Shortcuts → **+** → add **Text** with the content `refresh`.
 2. Add **Run Script** (Scriptable), choose `claude-usage-widget`, and pass the Text as the action's input.
-3. Run the Shortcut (or attach it to a personal automation) whenever you want a silent refresh. It updates the cache without showing a menu, so the next widget render shows fresh numbers.
+3. Run the Shortcut (or attach it to a personal automation) whenever you want a silent refresh. It updates the cache without showing a menu. **iOS still decides when the widget redraws**, so the new numbers may not appear until the next scheduled widget refresh; opening the app or tapping the widget nudges it.
 
 ## Updating the script
 
