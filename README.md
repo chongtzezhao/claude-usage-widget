@@ -19,6 +19,8 @@ Keeps Claude's and ChatGPT/Codex's `5H` and `1W` percentages (plus reset countdo
 
 Sign in once per provider; each widget refreshes itself in the background.
 
+> **On iPhone or iPad?** Use the [Scriptable widget](ios-scriptable/README.md) in this repo — the same Claude + Codex `5H`/`1W` usage, reset countdowns and pace markers, with no Apple Developer account, Xcode or backend. Install the free Scriptable app, import one `.js` file, and sign in once per device.
+
 </div>
 
 ---
@@ -60,6 +62,7 @@ Anthropic and OpenAI provide no public API for consumer subscription usage. Thes
 ## ✨ Highlights
 
 - **Two providers, two widgets, one APK.** Add Claude Usage, Codex Usage, or both.
+- **iPhone + iPad, no Apple Developer account.** The [`ios-scriptable/`](ios-scriptable/README.md) Scriptable widget brings the same layouts — including iPad `medium`/`large`/`extraLarge` and lock-screen accessories — to iOS/iPadOS using a single JavaScript file and on-device Keychain credentials.
 - **Rolling windows at a glance.** 5-hour and 1-week percentages, with a live countdown to each reset and a pace marker showing whether you're under, on, over, or critically ahead of the window's clock. Codex plans that only expose a weekly cap show a weekly-only layout instead of a fake 5H bar.
 - **Refreshes itself.** A background job updates each provider every ~15 minutes; tap a widget to force an immediate refresh.
 - **Sign in once per provider.** A single `claude.ai` or `chatgpt.com` login; you only re-authenticate when that session finally expires.
@@ -119,5 +122,6 @@ Or copy that APK to the phone and tap it to sideload it directly.
 | `ui/MainActivity.kt` | The setup / debug screen, with a section per provider. |
 | `widget/` | Both Glance widgets (`UsageWidget` for Claude, `CodexWidget` for Codex) and their layouts. |
 | `work/` | Background refresh scheduling for both providers. |
+| `ios-scriptable/` | The iPhone/iPad Scriptable widget (one JS file), install guide, troubleshooting and Node tests. |
 
 </details>
