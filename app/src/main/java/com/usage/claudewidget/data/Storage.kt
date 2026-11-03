@@ -6,11 +6,15 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
 /**
- * Two-tier storage:
- *  - [secure]   EncryptedSharedPreferences for credentials (sessionKey, cf_clearance, UA, orgId).
+ * Two-tier storage per provider:
+ *  - [secure]   EncryptedSharedPreferences for credentials (session cookies, UA, ids).
  *  - [snapshot] Plain prefs for the non-secret usage snapshot the widget renders on every frame.
+ *
+ * Each provider has its own pair of preference files. The Claude file names and keys
+ * are unchanged from v1.0.x, so upgrading in place keeps the existing sign-in.
  */
 class Storage private constructor(
+    val provider: Provider,
     private val secure: SharedPreferences,
     private val snapshot: SharedPreferences,
 ) {
@@ -18,6 +22,11 @@ class Storage private constructor(
     var sessionKey: String?
         get() = secure.getString("sessionKey", null)
         set(v) = secure.edit().putString("sessionKey", v).apply()
+
+    /** Raw chatgpt.com Cookie header, replayed verbatim so NextAuth .0/.1 chunks survive. */
+    var chatGptCookie: String?
+        get() = secure.getString("chatgpt_cookie", null)
+        set(v) = secure.edit().putString("chatgpt_cookie", v).apply()
 
     var cfClearance: String?
         get() = secure.getString("cf_clearance", null)
@@ -31,7 +40,11 @@ class Storage private constructor(
         get() = secure.getString("org_id", null)
         set(v) = secure.edit().putString("org_id", v).apply()
 
-    val isLoggedIn: Boolean get() = !sessionKey.isNullOrBlank()
+    val isLoggedIn: Boolean
+        get() = when (provider) {
+            Provider.CLAUDE -> !sessionKey.isNullOrBlank()
+            Provider.CODEX -> !chatGptCookie.isNullOrBlank()
+        }
 
     fun clearCredentials() {
         secure.edit().clear().apply()
@@ -54,6 +67,15 @@ class Storage private constructor(
         get() = snapshot.getLong("wk_reset", 0L)
         set(v) = snapshot.edit().putLong("wk_reset", v).apply()
 
+    /** Duration of the weekly-style window; used only to pick a "1W" vs "30D" label. */
+    var weeklyWindowSeconds: Long
+        get() = snapshot.getLong("wk_seconds", 604_800L)
+        set(v) = snapshot.edit().putLong("wk_seconds", v).apply()
+
+    var planType: String
+        get() = snapshot.getString("plan_type", "").orEmpty()
+        set(v) = snapshot.edit().putString("plan_type", v).apply()
+
     var fetchedAt: Long
         get() = snapshot.getLong("fetched_at", 0L)
         set(v) = snapshot.edit().putLong("fetched_at", v).apply()
@@ -63,7 +85,11 @@ class Storage private constructor(
         get() = AuthState.entries.getOrElse(snapshot.getInt("auth_state", 0)) { AuthState.OK }
         set(v) = snapshot.edit().putInt("auth_state", v.ordinal).apply()
 
-    val hasSnapshot: Boolean get() = fiveHourUtil >= 0f
+    val hasSnapshot: Boolean get() = fetchedAt > 0L
+
+    /** Codex plans may expose only one window; -1f means "not provided by the plan". */
+    val fiveHourMissing: Boolean get() = fiveHourUtil < 0f
+    val sevenDayMissing: Boolean get() = sevenDayUtil < 0f
 
     fun saveSnapshot(s: UsageSnapshot) {
         snapshot.edit()
@@ -71,30 +97,44 @@ class Storage private constructor(
             .putLong("fh_reset", s.fiveHour.resetsAtEpochMs)
             .putFloat("wk_util", s.sevenDay.utilization)
             .putLong("wk_reset", s.sevenDay.resetsAtEpochMs)
+            .putLong("wk_seconds", 604_800L)
+            .putLong("fetched_at", s.fetchedAtEpochMs)
+            .apply()
+    }
+
+    fun saveCodexSnapshot(s: CodexSnapshot) {
+        snapshot.edit()
+            .putFloat("fh_util", s.fiveHour?.utilization ?: -1f)
+            .putLong("fh_reset", s.fiveHour?.resetsAtEpochMs ?: 0L)
+            .putFloat("wk_util", s.weekly?.utilization ?: -1f)
+            .putLong("wk_reset", s.weekly?.resetsAtEpochMs ?: 0L)
+            .putLong("wk_seconds", s.weeklyWindowSeconds)
+            .putString("plan_type", s.planType)
             .putLong("fetched_at", s.fetchedAtEpochMs)
             .apply()
     }
 
     companion object {
-        @Volatile private var instance: Storage? = null
+        private val instances = mutableMapOf<Provider, Storage>()
 
-        fun get(context: Context): Storage = instance ?: synchronized(this) {
-            instance ?: build(context.applicationContext).also { instance = it }
-        }
+        fun get(context: Context, provider: Provider = Provider.CLAUDE): Storage =
+            synchronized(this) {
+                instances.getOrPut(provider) { build(context.applicationContext, provider) }
+            }
 
-        private fun build(app: Context): Storage {
+        private fun build(app: Context, provider: Provider): Storage {
             val masterKey = MasterKey.Builder(app)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                 .build()
             val secure = EncryptedSharedPreferences.create(
                 app,
-                "claude_secure",
+                provider.securePrefsName,
                 masterKey,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
             )
-            val snapshot = app.getSharedPreferences("claude_usage", Context.MODE_PRIVATE)
-            return Storage(secure, snapshot)
+            val snapshot = app.getSharedPreferences(provider.snapshotPrefsName, Context.MODE_PRIVATE)
+            return Storage(provider, secure, snapshot)
         }
     }
 }

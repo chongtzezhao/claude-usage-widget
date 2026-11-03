@@ -28,13 +28,26 @@
 
         <receiver
             android:name=".widget.UsageWidgetReceiver"
-            android:exported="false">
+            android:exported="false"
+            android:label="@string/claude_widget_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/usage_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.CodexWidgetReceiver"
+            android:exported="false"
+            android:label="@string/codex_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/codex_widget_info" />
         </receiver>
 
     </application>

@@ -2,6 +2,7 @@ package com.usage.claudewidget.widget
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.Image
@@ -47,8 +48,10 @@ data class WidgetState(
 private val COMPACT_MAX_WIDTH = 130.dp
 
 // Colors come from resources so they auto-adapt to light/dark via values-night.
-private val accent = ColorProvider(R.color.accent)
-private fun barTrack() = ColorProvider(R.color.bar_track)
+// Resolve them per composition; the res-id ColorProvider overload is Glance-internal.
+@Composable
+internal fun colorProvider(resId: Int): ColorProvider =
+    ColorProvider(Color(LocalContext.current.getColor(resId)))
 
 @Composable
 fun UsageWidgetContent(state: WidgetState) {
@@ -95,14 +98,19 @@ private fun FullLayout(s: WidgetState) {
             )
         }
         Spacer(GlanceModifier.height(10.dp))
-        MeterRow("5H", s.fiveHourPct, s.fiveHourResets)
+        MeterRow("5H", s.fiveHourPct, s.fiveHourResets, colorProvider(R.color.accent))
         Spacer(GlanceModifier.height(10.dp))
-        MeterRow("1W", s.sevenDayPct, s.sevenDayResets)
+        MeterRow("1W", s.sevenDayPct, s.sevenDayResets, colorProvider(R.color.accent))
     }
 }
 
 @Composable
-private fun MeterRow(label: String, pct: Int, resets: String) {
+internal fun MeterRow(
+    label: String,
+    pct: Int,
+    resets: String,
+    color: ColorProvider,
+) {
     Column(modifier = GlanceModifier.fillMaxWidth()) {
         Row(
             modifier = GlanceModifier.fillMaxWidth(),
@@ -124,7 +132,7 @@ private fun MeterRow(label: String, pct: Int, resets: String) {
             )
         }
         Spacer(GlanceModifier.height(4.dp))
-        Bar(pct)
+        Bar(pct, color)
     }
 }
 
@@ -133,14 +141,18 @@ private fun CompactLayout(s: WidgetState) {
     Column(modifier = GlanceModifier.fillMaxSize()) {
         Lobster(16.dp)
         Spacer(GlanceModifier.height(6.dp))
-        CompactMeter("5H", s.fiveHourPct)
+        CompactMeter("5H", s.fiveHourPct, colorProvider(R.color.accent))
         Spacer(GlanceModifier.height(6.dp))
-        CompactMeter("1W", s.sevenDayPct)
+        CompactMeter("1W", s.sevenDayPct, colorProvider(R.color.accent))
     }
 }
 
 @Composable
-private fun CompactMeter(label: String, pct: Int) {
+internal fun CompactMeter(
+    label: String,
+    pct: Int,
+    color: ColorProvider,
+) {
     Column(modifier = GlanceModifier.fillMaxWidth()) {
         Row(modifier = GlanceModifier.fillMaxWidth()) {
             Text(
@@ -154,17 +166,17 @@ private fun CompactMeter(label: String, pct: Int) {
             )
         }
         Spacer(GlanceModifier.height(3.dp))
-        Bar(pct)
+        Bar(pct, color)
     }
 }
 
 @Composable
-private fun Bar(pct: Int) {
+internal fun Bar(pct: Int, color: ColorProvider) {
     LinearProgressIndicator(
         progress = (pct.coerceIn(0, 100)) / 100f,
         modifier = GlanceModifier.fillMaxWidth().height(6.dp).cornerRadius(3.dp),
-        color = accent,
-        backgroundColor = barTrack(),
+        color = color,
+        backgroundColor = colorProvider(R.color.bar_track),
     )
 }
 
@@ -205,7 +217,7 @@ private fun Loading(compact: Boolean) {
 }
 
 @Composable
-private fun StaleDot() {
+internal fun StaleDot() {
     Box(
         modifier = GlanceModifier.fillMaxSize().padding(2.dp),
         contentAlignment = Alignment.TopEnd,
@@ -214,7 +226,7 @@ private fun StaleDot() {
             modifier = GlanceModifier
                 .size(8.dp)
                 .cornerRadius(4.dp)
-                .background(ColorProvider(R.color.stale)),
+                .background(colorProvider(R.color.stale)),
         ) {}
     }
 }

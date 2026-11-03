@@ -22,8 +22,9 @@ object CloudflareResolver {
 
     /** @return true if a cf_clearance cookie was obtained and harvested into [storage]. */
     suspend fun resolve(context: Context, storage: Storage, timeoutMs: Long = 30_000): Boolean {
-        // Ensure the WebView jar carries our session before loading the page.
-        seedSessionCookie(storage)
+        // Claude credentials live in encrypted prefs, so seed the jar before loading.
+        // Codex cookies are already in the WebView jar from the interactive login.
+        if (storage.provider == Provider.CLAUDE) seedSessionCookie(storage)
 
         val ok = withTimeoutOrNull(timeoutMs) {
             runWebViewChallenge(context.applicationContext, storage)
@@ -36,7 +37,10 @@ object CloudflareResolver {
         val session = storage.sessionKey ?: return
         val cm = CookieManager.getInstance()
         cm.setAcceptCookie(true)
-        cm.setCookie(Const.BASE, "${Const.COOKIE_SESSION}=$session; Domain=.claude.ai; Path=/; Secure; HttpOnly")
+        cm.setCookie(
+            storage.provider.base,
+            "${storage.provider.sessionCookie}=$session; Domain=.claude.ai; Path=/; Secure; HttpOnly",
+        )
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -68,7 +72,7 @@ object CloudflareResolver {
                     webViewClient = object : WebViewClient() {
                         override fun onPageFinished(view: WebView, url: String) {
                             // Cloudflare may reload several times; check whether clearance landed.
-                            val cookies = cm.getCookie(Const.BASE) ?: ""
+                            val cookies = cm.getCookie(storage.provider.base) ?: ""
                             if (cookies.contains("${Const.COOKIE_CF}=")) {
                                 finish(true, view)
                             }
@@ -76,7 +80,7 @@ object CloudflareResolver {
                         }
                     }
                 }
-                webView.loadUrl(Const.CHALLENGE_URL)
+                webView.loadUrl(storage.provider.challengeUrl)
 
                 cont.invokeOnCancellation {
                     main.post { if (!settled) { settled = true; webView.destroy() } }
