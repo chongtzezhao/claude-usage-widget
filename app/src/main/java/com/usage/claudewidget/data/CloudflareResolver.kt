@@ -36,7 +36,7 @@ object CloudflareResolver {
         val session = storage.sessionKey ?: return
         val cm = CookieManager.getInstance()
         cm.setAcceptCookie(true)
-        cm.setCookie(Const.BASE, "${Const.COOKIE_SESSION}=$session; Domain=.claude.ai; Path=/")
+        cm.setCookie(Const.BASE, "${Const.COOKIE_SESSION}=$session; Domain=.claude.ai; Path=/; Secure; HttpOnly")
     }
 
     @SuppressLint("SetJavaScriptEnabled")

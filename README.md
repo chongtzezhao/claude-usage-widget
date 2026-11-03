@@ -15,7 +15,7 @@ Keeps your `5H` and `1W` percentages (plus *“resets in”* countdowns) live on
 
 <br />
 
-### [![Download APK](https://img.shields.io/badge/⬇%20Download%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/utaysi/claude-usage-widget/releases/latest/download/claude-usage-widget.apk)
+### [![Download APK](https://img.shields.io/badge/⬇%20Download%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/chongtzezhao/claude-usage-widget/releases/latest/download/claude-usage-widget.apk)
 
 Sign in once on the phone; the widget refreshes itself in the background.
 
@@ -25,7 +25,9 @@ Sign in once on the phone; the widget refreshes itself in the background.
 
 ## 📲 Install in 3 steps
 
-1. **[Download the APK](https://github.com/utaysi/claude-usage-widget/releases/latest/download/claude-usage-widget.apk)** on your Android phone (tap the button above).
+This fork uses a new APK signing key. If you installed the upstream app, uninstall it before installing this fork. Then sign in again. Uninstalling removes the app’s saved credentials and settings.
+
+1. **[Download the APK](https://github.com/chongtzezhao/claude-usage-widget/releases/latest/download/claude-usage-widget.apk)** on your Android phone (tap the button above).
 2. **Open the downloaded file** and tap **Install**.
 3. The first time, Android asks to **allow installs from this source** (your browser or file app). Tap **Settings → enable “Allow from this source” → back → Install**. If Play Protect shows an *“unsafe app?”* prompt, that warning appears for any app not installed from the Play Store; choose **Install anyway**.
 

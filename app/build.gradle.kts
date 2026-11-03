@@ -25,8 +25,8 @@ android {
         applicationId = "com.usage.claudewidget"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0"
+        versionCode = 6
+        versionName = "1.0.1"
     }
 
     signingConfigs {
@@ -79,7 +79,7 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.0")
 
     // Networking
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.1")
 
     // Encrypted storage
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
