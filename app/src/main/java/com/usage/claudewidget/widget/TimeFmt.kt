@@ -22,4 +22,14 @@ object TimeFmt {
         if (fetchedAt <= 0L) return true
         return now - fetchedAt > 31 * 60 * 1000L // > 31 min
     }
+
+    /** Human label for a rate-limit window duration; Codex plans vary by tier. */
+    fun windowLabel(seconds: Long): String {
+        if (seconds <= 0L || seconds == 604_800L) return "1W"
+        return when {
+            seconds % 86_400L == 0L -> "${seconds / 86_400L}D"
+            seconds % 3_600L == 0L -> "${seconds / 3_600L}H"
+            else -> "1W"
+        }
+    }
 }

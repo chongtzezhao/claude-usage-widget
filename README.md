@@ -1,9 +1,9 @@
 <div align="center">
 
-# 🦞 Claude Usage Widget
+# 🦞 Claude + Codex Usage Widget
 
-**An Android home-screen widget for your Claude subscription usage.**
-Keeps your `5H` and `1W` percentages (plus *“resets in”* countdowns) live on your home screen.
+**Android home-screen widgets for your Claude and OpenAI Codex subscription usage.**
+Keeps Claude's and ChatGPT/Codex's `5H` and `1W` percentages (plus *“resets in”* countdowns) live on your home screen — in one APK, with one widget each.
 
 ![status: working](https://img.shields.io/badge/status-working-brightgreen)
 ![platform: Android 8+](https://img.shields.io/badge/platform-Android%208%2B-3DDC84?logo=android&logoColor=white)
@@ -17,7 +17,7 @@ Keeps your `5H` and `1W` percentages (plus *“resets in”* countdowns) live on
 
 ### [![Download APK](https://img.shields.io/badge/⬇%20Download%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/chongtzezhao/claude-usage-widget/releases/latest/download/claude-usage-widget.apk)
 
-Sign in once on the phone; the widget refreshes itself in the background.
+Sign in once per provider; each widget refreshes itself in the background.
 
 </div>
 
@@ -26,6 +26,8 @@ Sign in once on the phone; the widget refreshes itself in the background.
 ## 📲 Install in 3 steps
 
 This fork uses a new APK signing key. If you installed the upstream app, uninstall it before installing this fork. Then sign in again. Uninstalling removes the app’s saved credentials and settings.
+
+Updating from v1.0.x of **this** repository? Install over the top: the signing key is unchanged, so your Claude sign-in and settings survive the update.
 
 1. **[Download the APK](https://github.com/chongtzezhao/claude-usage-widget/releases/latest/download/claude-usage-widget.apk)** on your Android phone (tap the button above).
 2. **Open the downloaded file** and tap **Install**.
@@ -37,38 +39,43 @@ Then continue with first-run setup below.
 
 ## 👋 First-run setup
 
-1. Open the **Claude Usage** app and tap **Sign in**, then complete the normal `claude.ai` login in the WebView. It closes automatically once it captures your session.
-2. Tap **Test fetch now** to confirm it prints your current `5H` and `1W` percentages. These should match `claude.ai/settings/usage`.
+1. Open the **Claude & Codex Usage** app. Sign in to **Claude** and/or **ChatGPT/Codex** — each has its own button and its own session.
+   - Claude: complete the normal `claude.ai` login in the WebView; it closes automatically once it captures your session.
+   - Codex: sign in at `chatgpt.com` with **email + password** (Google sign-in is blocked inside embedded WebViews). The session cookie is captured automatically.
+2. Tap **Test fetch now** under each provider to confirm it prints your current percentages. These should match `claude.ai/settings/usage` and the Codex usage page.
 3. Tap **Disable battery optimization** and allow it, so Android doesn't kill the 15-minute background refresh.
-4. Long-press your home screen → **Widgets** → **Claude Usage**, drag it on, and resize it however you like. Tap it any time to refresh.
+4. Long-press your home screen → **Widgets** → **Claude Usage** or **Codex Usage**, drag one (or both) on, and resize it however you like. Tap a widget any time to refresh it.
 
 ## 📋 Requirements
 
-- A Claude **Pro/Max** subscription (this reads consumer subscription usage, not API-key usage).
+- A Claude **Pro/Max** subscription and/or a ChatGPT plan that includes **Codex** (Plus/Pro/Team). This reads consumer subscription usage, not API-key usage.
 - **Android 8.0 (API 26)** or newer. Built and tested on a Pixel 9 / Android 16.
 
 ---
 
 ## ⚠️ Unofficial: use at your own risk
 
-Anthropic provides no public API for subscription (Pro/Max) usage. This widget replays the same **undocumented internal endpoint** that `claude.ai/settings/usage` calls in the browser, authorized by session cookies harvested from an in-app WebView login. It can break at any time if Anthropic changes the endpoint, the auth flow, or its Cloudflare protection. It is not a sanctioned integration, so use it for your own account only.
+Anthropic and OpenAI provide no public API for consumer subscription usage. These widgets replay the same **undocumented internal endpoints** that the `claude.ai/settings/usage` and Codex usage pages call in the browser, authorized by session cookies harvested from an in-app WebView login. They can break at any time if either provider changes its endpoint, auth flow, or Cloudflare protection. They are not sanctioned integrations, so use them for your own account only.
 
 ## ✨ Highlights
 
-- **Two rolling windows at a glance.** The 5-hour and 1-week usage percentages, with a live countdown to each reset.
-- **Refreshes itself.** A background job updates every ~15 minutes; tap the widget to force an immediate refresh.
-- **Sign in once.** A single `claude.ai` login; you only re-authenticate when the long-lived session finally expires (weeks).
-- **Resizes freely.** Snaps between a compact and a full layout, and adapts to light & dark themes.
+- **Two providers, two widgets, one APK.** Add Claude Usage, Codex Usage, or both.
+- **Rolling windows at a glance.** 5-hour and 1-week percentages, with a live countdown to each reset. Codex plans that only expose a weekly cap show a weekly-only layout instead of a fake 5H bar.
+- **Refreshes itself.** A background job updates each provider every ~15 minutes; tap a widget to force an immediate refresh.
+- **Sign in once per provider.** A single `claude.ai` or `chatgpt.com` login; you only re-authenticate when that session finally expires.
+- **Resizes freely.** Each widget snaps between a compact and a full layout, and adapts to light & dark themes.
 
 ## 🛠 How it works
 
 You log in once through a real `claude.ai` WebView. The app harvests the `sessionKey` and `cf_clearance` cookies plus the WebView User-Agent, stores them encrypted on-device, and fetches usage headlessly with `OkHttp`. When a headless fetch hits Cloudflare's challenge, the app silently re-solves it in an off-screen WebView (no interaction needed while `sessionKey` is valid) and retries. A `WorkManager` job refreshes every ~15 minutes. You only sign in again when the long-lived `sessionKey` itself expires, at which point the widget shows a *“Tap to sign in”* state.
 
-The widget snaps between a **Compact** layout (mascot + two mini bars + percentages) and a **Full** layout (mascot + label + two bars with percentage and *“resets in”* for each). Both adapt to light and dark themes, and a small amber dot appears when the numbers are stale.
+Each widget snaps between a **Compact** layout (icon + two mini bars + percentages) and a **Full** layout (icon + label + bars with percentage and *“resets in”* for each). Both adapt to light and dark themes, and a small amber dot appears when the numbers are stale.
+
+**Codex** works the same way, with one extra hop: the harvested `chatgpt.com` session cookie is exchanged for a short-lived access token at `/api/auth/session`, and that token authorises `/backend-api/wham/usage`. The token is never persisted; it is re-minted on every refresh. Window type is derived from `limit_window_seconds` (18000 = 5H, 604800 = 1W), so a plan that puts its weekly cap in the primary slot is still labelled correctly, and a weekly-only plan simply hides the 5H row.
 
 ## 🔒 Security notes
 
-Credentials (`sessionKey`, `cf_clearance`, User-Agent, org ID) are stored in `EncryptedSharedPreferences` backed by the Android Keystore, and `android:allowBackup="false"` keeps them out of cloud backups. The `sessionKey` is as sensitive as your account password (anyone who extracts it can act as you), so treat a rooted or compromised device accordingly. No secrets are stored in the repo or baked into the APK.
+Credentials (`sessionKey`, `cf_clearance`, User-Agent, org ID, and the raw `chatgpt.com` cookie) are stored in `EncryptedSharedPreferences` backed by the Android Keystore, and `android:allowBackup="false"` keeps them out of cloud backups. Both session cookies are as sensitive as an account password (anyone who extracts one can act as you), so treat a rooted or compromised device accordingly. No secrets are stored in the repo or baked into the APK.
 
 ---
 
@@ -105,10 +112,10 @@ Or copy that APK to the phone and tap it to sideload it directly.
 
 | Path | What lives there |
 | --- | --- |
-| `app/.../data` | Endpoint constants, encrypted storage, cookie harvesting, the Cloudflare resolver, and the repository that orchestrates fetch, Cloudflare retry, and auth-state transitions. |
-| `auth/LoginActivity.kt` | The WebView login. |
-| `ui/MainActivity.kt` | The setup / debug screen. |
-| `widget/` | The Glance widget and its layouts. |
-| `work/` | Background refresh scheduling. |
+| `data` | Endpoint constants, encrypted storage, cookie harvesting, the Cloudflare resolver, and the repositories that fetch Claude and ChatGPT/Codex usage. |
+| `auth/LoginActivity.kt` | The shared WebView login (a `provider` extra selects `claude.ai` or `chatgpt.com`). |
+| `ui/MainActivity.kt` | The setup / debug screen, with a section per provider. |
+| `widget/` | Both Glance widgets (`UsageWidget` for Claude, `CodexWidget` for Codex) and their layouts. |
+| `work/` | Background refresh scheduling for both providers. |
 
 </details>

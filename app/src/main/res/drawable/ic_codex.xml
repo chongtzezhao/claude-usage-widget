@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Abstract terminal-in-a-hexagon mark for the Codex widget. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M24,5 L40,14 L40,32 L24,41 L8,32 L8,14 Z"
+        android:strokeColor="#10A37F"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.2" />
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M18,18 L24,24 L18,30"
+        android:strokeColor="#10A37F"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.2" />
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M27,30 L33,30"
+        android:strokeColor="#10A37F"
+        android:strokeLineCap="round"
+        android:strokeWidth="3.2" />
+</vector>

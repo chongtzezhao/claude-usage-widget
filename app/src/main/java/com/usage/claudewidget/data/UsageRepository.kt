@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit
 
 sealed interface FetchResult {
     data class Success(val snapshot: UsageSnapshot) : FetchResult
+    data class CodexSuccess(val snapshot: CodexSnapshot) : FetchResult
     /** sessionKey is dead; user must log in again. */
     data object NeedsLogin : FetchResult
     /** Transient (no network, Cloudflare unresolved, server error). Keep last snapshot. */
