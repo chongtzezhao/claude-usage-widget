@@ -813,14 +813,15 @@ describe("selectProviders", () => {
     assert.deepEqual(selectProviders("garbage", ["codex"]), ["codex"]);
   });
 
-  it("falls back to whatever is signed in when the request cannot be met", () => {
-    assert.deepEqual(selectProviders("claude", ["codex"]), ["codex"]);
-    assert.deepEqual(selectProviders("both", ["claude"]), ["claude"]);
-    assert.deepEqual(selectProviders("claude", []), []);
+  it("honours an explicit parameter even when that provider is unavailable", () => {
+    assert.deepEqual(selectProviders("claude", ["codex"]), ["claude"]);
+    assert.deepEqual(selectProviders("both", ["claude"]), ["claude", "codex"]);
+    assert.deepEqual(selectProviders("codex", []), ["codex"]);
   });
 
   it("ignores unknown signed-in ids", () => {
-    assert.deepEqual(selectProviders("both", ["claude", "android"]), ["claude"]);
+    assert.deepEqual(selectProviders("both", ["claude", "android"]), ["claude", "codex"]);
+    assert.deepEqual(selectProviders("", ["claude", "android"]), ["claude"]);
   });
 });
 

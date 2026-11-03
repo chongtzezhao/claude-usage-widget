@@ -98,7 +98,7 @@ You only need one of them; sign in to the other later from the same menu. If the
 | `codex` | Codex only |
 | `both` | Both, side by side / stacked |
 
-The parameter is case-insensitive and ignores spaces. If you ask for a provider that is not signed in, the widget falls back to whichever provider *is* signed in. A **small** widget can only fit one provider, so it shows the first selected one (Claude when both are signed in).
+The parameter is case-insensitive and ignores spaces. An explicit parameter is authoritative: `codex` shows Codex (or its sign-in/open-app state) even if only Claude is signed in, and `both` always shows both slots. Leave it empty to show whichever providers are signed in. A **small** widget can only fit one provider, so with `both` it shows Claude first; set `codex` if you want a small Codex-only widget.
 
 ## Lock screen (iOS 16+ / iPadOS 17+)
 

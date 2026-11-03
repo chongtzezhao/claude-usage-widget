@@ -366,6 +366,20 @@ test("cache-only Codex is labelled as a snapshot and points to Refresh now", () 
   assert.match(text, /Open Scriptable/);
 });
 
+test("a verified Codex WebView session is shown even before a snapshot exists", () => {
+  globalThis.Keychain.clear();
+  globalThis.Keychain.set("cuw.codex.webviewSession", "1");
+  const empty = {
+    version: 1,
+    claude: { fetchedAt: 0, fiveHour: null, sevenDay: null, orgId: "", authState: "ok", error: "" },
+    codex: { fetchedAt: 0, fiveHour: null, weekly: null, weeklyWindowSeconds: 604800, planType: "", authState: "ok", error: "" },
+  };
+  const widget = widgetScript.buildWidget("large", empty, ["codex"], NOW);
+  const text = widget.allTexts.join(" | ");
+  assert.match(text, /Codex usage/);
+  assert.match(text, /Open the app to refresh/);
+});
+
 test("weekly-only Codex renders a weekly row and a caption", () => {
   signInBoth();
   const cache = richCache();

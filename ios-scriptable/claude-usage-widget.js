@@ -584,11 +584,12 @@ function selectProviders(widgetParameter, signedInIds) {
     ? signedInIds.filter(function (id) { return id === "claude" || id === "codex"; })
     : [];
   const p = typeof widgetParameter === "string" ? widgetParameter.trim().toLowerCase() : "";
-  let wanted;
-  if (p === "claude" || p === "codex") wanted = [p];
-  else if (p === "both") wanted = ["claude", "codex"];
-  else wanted = CONFIG.providers.slice();
-  const filtered = wanted.filter(function (id) { return signed.indexOf(id) !== -1; });
+  // An explicit parameter is authoritative: if that provider is not signed in,
+  // show its sign-in/refresh state rather than silently replacing it with the
+  // other provider. This makes "codex" and "both" predictable.
+  if (p === "claude" || p === "codex") return [p];
+  if (p === "both") return ["claude", "codex"];
+  const filtered = CONFIG.providers.filter(function (id) { return signed.indexOf(id) !== -1; });
   if (filtered.length > 0) return filtered;
   return signed.slice();
 }
@@ -1012,10 +1013,10 @@ async function fetchClaude(opts) {
 function codexBaseHeaders(cookie, userAgent) {
   const headers = {
     "Accept-Language": "en-US,en;q=0.9",
-    "Cookie": cookie, // raw jar string, so NextAuth .0/.1 chunks stay intact
     "Referer": CODEX.REFERER,
     "Origin": CODEX.BASE,
   };
+  if (cookie) headers["Cookie"] = cookie; // raw jar, so NextAuth .0/.1 chunks stay intact
   if (userAgent) headers["User-Agent"] = userAgent;
   return headers;
 }
@@ -1078,6 +1079,14 @@ async function codexGetUsage(cookie, token, userAgent, timeoutSeconds) {
     result = await codexGetUsageAt(CODEX.USAGE_FALLBACK_URL, cookie, token, userAgent, timeoutSeconds);
   }
   return result;
+}
+
+/**
+ * Fetches Codex usage with just a freshly minted access token. Used when the
+ * in-page fetch fails but the WebView validation did produce a token.
+ */
+async function codexGetUsageWithToken(token, userAgent, timeoutSeconds) {
+  return codexGetUsage("", token, userAgent, timeoutSeconds);
 }
 
 /**
@@ -1506,8 +1515,17 @@ async function signIn(provider) {
   } else {
     fetchResult = await withTimeout(fetchCodex({ allowWebviewRepair: true }), 60000,
       { kind: "soft", reason: "timeout" });
-    if (fetchResult.kind !== "ok" && result.token && result.webview) {
-      fetchResult = await codexInPageUsage(result.webview, result.token);
+    if (fetchResult.kind !== "ok" && result.token) {
+      if (result.webview) {
+        fetchResult = await codexInPageUsage(result.webview, result.token);
+      }
+      // If the WebView fetch is blocked, the token still authorises a direct
+      // request to the same usage endpoint.
+      if (fetchResult.kind !== "ok") {
+        fetchResult = await codexGetUsageWithToken(
+          result.token, keyGet(KEYS.codex.userAgent), 20
+        );
+      }
     }
   }
 
@@ -1721,7 +1739,9 @@ function buildViewState(provider, cache, now) {
   const hasSnapshot = !!entry.fetchedAt;
   // Without harvested cookies we cannot refresh in the background, but a
   // snapshot captured through the hidden WebView is still worth showing.
-  const needsLogin = entry.authState === "needs_login" || (!signedIn && !hasSnapshot);
+  const sessionOnly = provider === "codex" && hasCodexWebViewSession() && !hasSnapshot;
+  const needsLogin = entry.authState === "needs_login" ||
+    (!signedIn && !hasSnapshot && !sessionOnly);
   const cacheOnly = hasSnapshot && !signedIn;
   const meters = provider === "claude" ? claudeMeters(entry, now) : codexMeters(entry, now);
   let caption = "";
@@ -1741,9 +1761,10 @@ function buildViewState(provider, cache, now) {
     caption: caption,
     error: entry.error || "",
     cacheOnly: cacheOnly,
+    sessionOnly: sessionOnly,
     // Signed in but the first fetch failed: don't pretend the plan has no limits.
-    unavailable: !needsLogin && !hasSnapshot && !!entry.error,
-    noLimits: !needsLogin && !(!hasSnapshot && !!entry.error) && meters.length === 0,
+    unavailable: !needsLogin && (sessionOnly || (!hasSnapshot && !!entry.error)),
+    noLimits: !needsLogin && !sessionOnly && !(!hasSnapshot && !!entry.error) && meters.length === 0,
   };
 }
 
@@ -2171,6 +2192,7 @@ async function runWidget() {
   // latter keeps the limited-refresh fallback (in-page fetch without a
   // harvestable cookie) visible instead of showing a sign-in prompt.
   const available = signedInProviderIds();
+  if (hasCodexWebViewSession() && available.indexOf("codex") === -1) available.push("codex");
   ["claude", "codex"].forEach(function (id) {
     if (cache[id] && cache[id].fetchedAt > 0 && available.indexOf(id) === -1) available.push(id);
   });
@@ -2273,8 +2295,11 @@ async function refreshNow() {
         }
       } else {
         const v = await validateCodexHidden();
-        if (v.ok && v.token && v.webview) {
-          result = await codexInPageUsage(v.webview, v.token);
+        if (v.ok && v.token) {
+          result = v.webview ? await codexInPageUsage(v.webview, v.token) : null;
+          if (!result || result.kind !== "ok") {
+            result = await codexGetUsageWithToken(v.token, keyGet(KEYS.codex.userAgent), 20);
+          }
         } else if (!v.unauthenticated) {
           result = { kind: "soft", reason: "webview-unavailable" };
         }
@@ -2362,6 +2387,7 @@ async function previewFlow() {
   const family = families[choice];
   const cache = loadCache();
   const available = signedInProviderIds();
+  if (hasCodexWebViewSession() && available.indexOf("codex") === -1) available.push("codex");
   ["claude", "codex"].forEach(function (id) {
     if (cache[id] && cache[id].fetchedAt > 0 && available.indexOf(id) === -1) available.push(id);
   });
