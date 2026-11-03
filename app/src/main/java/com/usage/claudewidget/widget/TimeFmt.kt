@@ -1,7 +1,7 @@
 package com.usage.claudewidget.widget
 
 object TimeFmt {
-    /** "resets in" value, e.g. "3h 12m", "5d 2h", "<1m", or "-" if unknown. */
+    /** Reset countdown, e.g. "3h 12m", "5d 2h", "<1m", or "-" if unknown. */
     fun resetsIn(resetEpochMs: Long, now: Long = System.currentTimeMillis()): String {
         if (resetEpochMs <= 0L) return "-"
         var s = (resetEpochMs - now) / 1000
@@ -21,6 +21,37 @@ object TimeFmt {
     fun isStale(fetchedAt: Long, now: Long = System.currentTimeMillis()): Boolean {
         if (fetchedAt <= 0L) return true
         return now - fetchedAt > 31 * 60 * 1000L // > 31 min
+    }
+
+    /**
+     * Projects current usage to the end of the window and classifies the pace.
+     * Returns null when the window is unknown, not started, already reset, or
+     * during its first 5% (too noisy to be meaningful).
+     */
+    fun pace(
+        usedPct: Int,
+        resetAtEpochMs: Long,
+        windowSeconds: Long,
+        now: Long = System.currentTimeMillis(),
+    ): Pace? {
+        if (resetAtEpochMs <= 0L || windowSeconds <= 0L) return null
+        val windowMillis = windowSeconds.toDouble() * 1000.0
+        if (windowMillis <= 0.0) return null
+        val start = resetAtEpochMs - windowMillis
+        if (now <= start || now >= resetAtEpochMs) return null
+        val elapsedFraction = (now - start) / windowMillis
+        if (elapsedFraction < 0.05) return null
+
+        val used = usedPct.coerceIn(0, 100).toDouble()
+        val projected = used / elapsedFraction // percentage at reset
+        return when {
+            // Already burning through the window near its end: no time to recover.
+            used >= 90.0 && elapsedFraction < 1.0 -> Pace.CRITICAL
+            projected < 85.0 -> Pace.UNDER
+            projected <= 105.0 -> Pace.ON_TRACK
+            projected <= 125.0 -> Pace.OVER
+            else -> Pace.CRITICAL
+        }
     }
 
     /** Human label for a rate-limit window duration; Codex plans vary by tier. */

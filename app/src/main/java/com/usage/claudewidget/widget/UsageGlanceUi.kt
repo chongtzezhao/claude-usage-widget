@@ -40,8 +40,10 @@ data class WidgetState(
     val hasData: Boolean,
     val fiveHourPct: Int,
     val fiveHourResets: String,
+    val fiveHourPace: Pace?,
     val sevenDayPct: Int,
     val sevenDayResets: String,
+    val weeklyPace: Pace?,
     val stale: Boolean,
 )
 
@@ -98,9 +100,21 @@ private fun FullLayout(s: WidgetState) {
             )
         }
         Spacer(GlanceModifier.height(10.dp))
-        MeterRow("5H", s.fiveHourPct, s.fiveHourResets, colorProvider(R.color.accent))
+        MeterRow(
+            "5H",
+            s.fiveHourPct,
+            s.fiveHourResets,
+            s.fiveHourPace,
+            colorProvider(R.color.accent),
+        )
         Spacer(GlanceModifier.height(10.dp))
-        MeterRow("1W", s.sevenDayPct, s.sevenDayResets, colorProvider(R.color.accent))
+        MeterRow(
+            "1W",
+            s.sevenDayPct,
+            s.sevenDayResets,
+            s.weeklyPace,
+            colorProvider(R.color.accent),
+        )
     }
 }
 
@@ -109,6 +123,7 @@ internal fun MeterRow(
     label: String,
     pct: Int,
     resets: String,
+    pace: Pace?,
     color: ColorProvider,
 ) {
     Column(modifier = GlanceModifier.fillMaxWidth()) {
@@ -126,14 +141,27 @@ internal fun MeterRow(
                 style = TextStyle(color = GlanceTheme.colors.onSurface, fontWeight = FontWeight.Bold),
             )
             Spacer(GlanceModifier.defaultWeight())
+            if (pace != null) {
+                PaceIcon(pace)
+                Spacer(GlanceModifier.width(4.dp))
+            }
             Text(
-                "resets in $resets",
+                resets,
                 style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant),
             )
         }
         Spacer(GlanceModifier.height(4.dp))
         Bar(pct, color)
     }
+}
+
+@Composable
+internal fun PaceIcon(pace: Pace) {
+    Image(
+        provider = ImageProvider(pace.iconRes),
+        contentDescription = pace.label,
+        modifier = GlanceModifier.size(14.dp),
+    )
 }
 
 @Composable

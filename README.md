@@ -3,7 +3,7 @@
 # 🦞 Claude + Codex Usage Widget
 
 **Android home-screen widgets for your Claude and OpenAI Codex subscription usage.**
-Keeps Claude's and ChatGPT/Codex's `5H` and `1W` percentages (plus *“resets in”* countdowns) live on your home screen — in one APK, with one widget each.
+Keeps Claude's and ChatGPT/Codex's `5H` and `1W` percentages (plus reset countdowns and a pace marker) live on your home screen — in one APK, with one widget each.
 
 ![status: working](https://img.shields.io/badge/status-working-brightgreen)
 ![platform: Android 8+](https://img.shields.io/badge/platform-Android%208%2B-3DDC84?logo=android&logoColor=white)
@@ -60,7 +60,7 @@ Anthropic and OpenAI provide no public API for consumer subscription usage. Thes
 ## ✨ Highlights
 
 - **Two providers, two widgets, one APK.** Add Claude Usage, Codex Usage, or both.
-- **Rolling windows at a glance.** 5-hour and 1-week percentages, with a live countdown to each reset. Codex plans that only expose a weekly cap show a weekly-only layout instead of a fake 5H bar.
+- **Rolling windows at a glance.** 5-hour and 1-week percentages, with a live countdown to each reset and a pace marker showing whether you're under, on, over, or critically ahead of the window's clock. Codex plans that only expose a weekly cap show a weekly-only layout instead of a fake 5H bar.
 - **Refreshes itself.** A background job updates each provider every ~15 minutes; tap a widget to force an immediate refresh.
 - **Sign in once per provider.** A single `claude.ai` or `chatgpt.com` login; you only re-authenticate when that session finally expires.
 - **Resizes freely.** Each widget snaps between a compact and a full layout, and adapts to light & dark themes.
@@ -69,7 +69,9 @@ Anthropic and OpenAI provide no public API for consumer subscription usage. Thes
 
 You log in once through a real `claude.ai` WebView. The app harvests the `sessionKey` and `cf_clearance` cookies plus the WebView User-Agent, stores them encrypted on-device, and fetches usage headlessly with `OkHttp`. When a headless fetch hits Cloudflare's challenge, the app silently re-solves it in an off-screen WebView (no interaction needed while `sessionKey` is valid) and retries. A `WorkManager` job refreshes every ~15 minutes. You only sign in again when the long-lived `sessionKey` itself expires, at which point the widget shows a *“Tap to sign in”* state.
 
-Each widget snaps between a **Compact** layout (icon + two mini bars + percentages) and a **Full** layout (icon + label + bars with percentage and *“resets in”* for each). Both adapt to light and dark themes, and a small amber dot appears when the numbers are stale.
+Each widget snaps between a **Compact** layout (icon + two mini bars + percentages) and a **Full** layout (icon + label + bars with percentage, reset countdown, and a pace icon for each window). Both adapt to light and dark themes, and a small amber dot appears when the numbers are stale.
+
+The pace icon projects current usage to the end of the window: **under** (blue, down arrow) means you'll leave quota unused, **on pace** (green, check) means you'll roughly land at 100%, **over** (amber, up arrow) means you'll hit the cap early unless you slow down, and **critical** (red, warning) means you're likely to exhaust the window well before it resets. It stays hidden for the first 5% of a window, where a short burst would be misleading.
 
 **Codex** works the same way, with one extra hop: the harvested `chatgpt.com` session cookie is exchanged for a short-lived access token at `/api/auth/session`, and that token authorises `/backend-api/wham/usage`. The token is never persisted; it is re-minted on every refresh. Window type is derived from `limit_window_seconds` (18000 = 5H, 604800 = 1W), so a plan that puts its weekly cap in the primary slot is still labelled correctly, and a weekly-only plan simply hides the 5H row.
 
