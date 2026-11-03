@@ -5,6 +5,8 @@ A single-file [Scriptable](https://scriptable.app) script that puts your **Claud
 <p align="center">
   <a href="claude-usage-widget.js?raw=1"><b>Download the script</b></a>
   ·
+  <a href="install.js?raw=1">Installer helper</a>
+  ·
   <a href="TROUBLESHOOTING.md">Troubleshooting</a>
   ·
   <a href="https://github.com/chongtzezhao/claude-usage-widget/issues/3">Issue #3</a>
@@ -34,16 +36,35 @@ A single-file [Scriptable](https://scriptable.app) script that puts your **Claud
 
 Install **Scriptable** from the App Store, then open it once.
 
-### 2. Import the script
+### 2. Import the script (pick one)
 
-**Option A — from the repo (recommended).** Open [`ios-scriptable/claude-usage-widget.js`](claude-usage-widget.js), tap **Raw** (top right), select all, copy, then in Scriptable tap **+** (top right), paste, and name the script `claude-usage-widget`. Tap **Done**.
+Scriptable has no “import from URL” button, but its scripts are plain `.js` files, so you can put the file in its folder instead of pasting 2,000 lines.
 
-> **Reading this in the PR before it merges?** The default branch is `master` and does not contain this file yet, so a `master` raw URL returns **404**. Use the PR-branch raw URL instead:
+**Option A — installer script (easiest).**
+
+1. Open [`install.js`](install.js), tap **Raw**, select all, and copy. It is only a short bootstrap.
+2. In Scriptable, tap **+**, paste, name it `install`, and tap **Done**.
+3. Tap ▶ to run it. It downloads the full widget into Scriptable's script folder and shows **Installed**.
+4. Close the alert, open the script list, and run `claude-usage-widget` to sign in. You can delete the `install` script afterwards.
+
+The installer tries `master` first and falls back to the PR branch, so it works before and after the pull request is merged.
+
+**Option B — iCloud Drive (no code at all).**
+
+1. Open the raw widget file in Safari: [claude-usage-widget.js](claude-usage-widget.js?raw=1).
+2. Tap **Share** → **Save to Files** → **iCloud Drive** → **Scriptable** → **Save**. Keep the filename `claude-usage-widget.js`.
+3. Open Scriptable. The script appears in the list immediately after the folder syncs. If it does not, make sure iCloud Drive / iCloud sync is enabled for Scriptable.
+
+> If Safari insists on saving it as `.txt`, rename it in the **Files** app so it ends in `.js`; Scriptable only lists JavaScript files.
+
+**Option C — copy/paste the full file.** Open [`ios-scriptable/claude-usage-widget.js`](claude-usage-widget.js), tap **Raw**, select all, copy, then in Scriptable tap **+**, paste, and name it `claude-usage-widget`.
+
+> **Reading this in the PR before it merges?** `master` does not contain the file yet, so a `master` raw URL returns **404**. The installer handles this automatically. For manual download, use the PR-branch raw URL:
 > <https://raw.githubusercontent.com/chongtzezhao/claude-usage-widget/feat/scriptable-ios-widget/ios-scriptable/claude-usage-widget.js>
 > After the PR is merged, the `master` URL works:
 > <https://raw.githubusercontent.com/chongtzezhao/claude-usage-widget/master/ios-scriptable/claude-usage-widget.js>
 
-**Option B — copy/paste.** From the repository, open [`claude-usage-widget.js`](claude-usage-widget.js), copy its full contents, and paste into a new Scriptable script the same way.
+**Option D — ScriptDude (third-party).** If you already use [ScriptDude](https://scriptdu.de/), share the GitHub file to it and it will install/update the script for you. It is not required and not affiliated with this project.
 
 > Keep the name `claude-usage-widget` if you can — the instructions below use it. Any name works, but you will need to select it when configuring the widget.
 
