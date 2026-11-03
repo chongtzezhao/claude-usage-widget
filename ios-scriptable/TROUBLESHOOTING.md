@@ -6,6 +6,19 @@ Still stuck? Open the script in Scriptable and use **Help** in the menu, then fi
 
 ---
 
+## "Continue with Google" fails on Claude
+
+**What it means:** Google blocks its OAuth flow inside embedded browsers such as Scriptable’s WebView. The exact error is usually *“There was an error logging you in. If the problem persists contact support for assistance.”* This is not a broken Claude account.
+
+**Fix:**
+
+1. On the Claude login page, choose **Continue with email** instead of Google. Use the email address on your Claude account, including a Gmail address.
+2. If Claude sends a verification code, enter it in the page.
+3. If Claude sends a sign-in **link** and tapping it opens Safari, don’t continue there. Copy the link, return to Scriptable, and choose **Paste email sign-in link** in the Claude sign-in flow. The script only accepts `https://claude.ai/...` links.
+4. Tap **Done** once the signed-in Claude page is visible, then choose **Check sign-in** if prompted.
+
+Claude has no separate password login; emailed links/codes are the supported fallback. If your account was created with Google and the email route is unavailable, Claude’s support docs describe unlinking Google: <https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account>.
+
 ## "Tap to sign in" even though I'm logged in
 
 **What it means:** the widget is not seeing a usable credential for that provider — the stored session cookie is gone or rejected (HTTP 401, or a redirect to the provider's login page).
@@ -87,6 +100,7 @@ If the dot is showing but the numbers are correct, nothing is broken — the dot
 
 - **Google sign-in does not work.** `chatgpt.com` blocks Google/OAuth sign-in inside embedded WebViews. Use **email + password** (or another non-Google method) in the sign-in screen.
 - **Only a weekly bar shows.** Some plans expose only a weekly cap. That is a real plan shape: the widget hides the `5H` row and shows a "Weekly-only plan" caption instead of a fake bar. Nothing to fix.
+- **The widget says “Snapshot” or never updates.** Codex signed in, but WebKit may not expose the session cookie. The widget can display the snapshot but cannot fetch in the background. Open Scriptable → **Refresh now** to update it through the signed-in WebView. Automatic background refresh needs the cookie to be harvested, which depends on Scriptable/iOS.
 - **"No usage limits" or "Open the app to refresh".** "No usage limits" means the provider returned a valid payload with no limit windows (rare). "Open the app to refresh" means the provider is signed in but the **first fetch has not succeeded yet**; open the script → **Refresh now**, and if it keeps failing, sign in again. Check the app menu for the short error (`Session expired`, `Cloudflare challenge`, `Network error`).
 - **The percentages differ from the website.** Usage moves continuously; the widget shows the last fetch plus a reset countdown. Refresh once and compare again. A big difference usually means the widget is stale (amber dot).
 

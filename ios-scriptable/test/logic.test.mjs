@@ -32,6 +32,7 @@ const {
   mergeCodexSnapshot,
   selectProviders,
   providersToRefresh,
+  isClaudeLink,
   parseCookieHeader,
   hasSessionCookie,
   hasProviderSession,
@@ -843,6 +844,22 @@ describe("providersToRefresh", () => {
 
   it("keeps the signed-in provider even when the cache is empty", () => {
     assert.deepEqual(providersToRefresh(["codex"], { claude: { fetchedAt: 0 } }), ["codex"]);
+  });
+});
+
+describe("isClaudeLink", () => {
+  it("accepts HTTPS links on claude.ai and its subdomains", () => {
+    assert.equal(isClaudeLink("https://claude.ai/login?code=abc"), true);
+    assert.equal(isClaudeLink("https://www.claude.ai/magic-link#token"), true);
+    assert.equal(isClaudeLink("https://foo.claude.ai/path"), true);
+  });
+
+  it("rejects insecure, foreign and credentialed links", () => {
+    assert.equal(isClaudeLink("http://claude.ai/login"), false);
+    assert.equal(isClaudeLink("https://evil.example/claude.ai"), false);
+    assert.equal(isClaudeLink("https://user:pass@claude.ai/login"), false);
+    assert.equal(isClaudeLink(""), false);
+    assert.equal(isClaudeLink(null), false);
   });
 });
 

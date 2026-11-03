@@ -72,10 +72,12 @@ The installer tries `master` first and falls back to the PR branch, so it works 
 
 Open the script in Scriptable and tap ▶ to run it. A welcome menu appears:
 
-- **Sign in to Claude** — the normal `claude.ai` login page opens in a WebView. Sign in as usual. **When the signed-in Claude page is visible, tap Done** (top left). Scriptable then reads the session cookie and fetches your usage.
+- **Sign in to Claude** — the normal `claude.ai` login page opens in a WebView. **Do not use “Continue with Google”**: Google blocks OAuth inside Scriptable’s WebView. Choose **Continue with email** and use your existing Claude account email (including a Gmail address). If Claude offers a verification code, enter it there. If tapping the email link opens Safari instead, copy the link from the email and choose **Paste email sign-in link** in Scriptable. Tap **Done** once the signed-in Claude page is visible.
 - **Sign in to Codex** — sign in at `chatgpt.com` with **email and password**. Google sign-in is blocked inside embedded WebViews, so the Google button will not work. Again, tap **Done** once the signed-in ChatGPT page is visible.
 
 You only need one of them; sign in to the other later from the same menu. If the script says **"Not signed in yet"**, run the sign-in again and make sure the signed-in page is fully visible before tapping Done.
+
+> **Claude accounts created with Google:** Claude’s email login still uses the same account email. If necessary, Claude’s support docs explain how to unlink Google and use emailed sign-in links: <https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account>.
 
 ### 4. Add the widget
 
@@ -125,6 +127,12 @@ Prefer no taps? Make a Shortcut that runs the script with the text `refresh`:
 1. Shortcuts → **+** → add **Text** with the content `refresh`.
 2. Add **Run Script** (Scriptable), choose `claude-usage-widget`, and pass the Text as the action's input.
 3. Run the Shortcut (or attach it to a personal automation) whenever you want a silent refresh. It updates the cache without showing a menu. **iOS still decides when the widget redraws**, so the new numbers may not appear until the next scheduled widget refresh; opening the app or tapping the widget nudges it.
+
+### Snapshot mode
+
+WebKit sometimes hides the `HttpOnly` session cookie from scripts. The widget can still show the last usage captured during sign-in, but it cannot fetch new numbers in the background. In that case it labels the provider **“Snapshot · updated Xm ago”** and shows **“Open Scriptable → Refresh now”**.
+
+This is common and not an error. Open Scriptable, run `claude-usage-widget`, and choose **Refresh now** whenever you want current numbers; the in-app fallback fetches them through the signed-in WebView. Automatic background refresh requires the cookie to be exposed, which depends on Scriptable/iOS.
 
 ## Updating the script
 

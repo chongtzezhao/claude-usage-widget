@@ -358,6 +358,14 @@ test("no credentials and no cache shows the sign-in placeholder", () => {
   assert.match(text, /Tap to sign in/);
 });
 
+test("cache-only Codex is labelled as a snapshot and points to Refresh now", () => {
+  globalThis.Keychain.clear();
+  const widget = widgetScript.buildWidget("large", richCache(), ["claude", "codex"], NOW);
+  const text = widget.allTexts.join(" | ");
+  assert.match(text, /Snapshot/);
+  assert.match(text, /Open Scriptable/);
+});
+
 test("weekly-only Codex renders a weekly row and a caption", () => {
   signInBoth();
   const cache = richCache();

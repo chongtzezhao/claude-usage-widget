@@ -646,6 +646,7 @@ const KEYS = {
     cookie: "cuw.codex.cookie", // full jar string; NextAuth .0/.1 chunks stay intact
     cfClearance: "cuw.codex.cf_clearance",
     userAgent: "cuw.codex.userAgent",
+    webviewSession: "cuw.codex.webviewSession", // marker: WebView sign-in verified
   },
 };
 
@@ -661,10 +662,25 @@ function hasCodexCreds() {
   return hasProviderSession(keyGet(KEYS.codex.cookie), "codex");
 }
 
+/** True after a hidden-WebView Codex validation succeeded. The WebView may
+ *  still have a live session even when WebKit never exposed its HttpOnly
+ *  cookie to us, so this keeps "Refresh now" available. */
+function hasCodexWebViewSession() {
+  return keyGet(KEYS.codex.webviewSession) === "1";
+}
+
 function signedInProviderIds() {
   const ids = [];
   if (hasClaudeCreds()) ids.push("claude");
   if (hasCodexCreds()) ids.push("codex");
+  return ids;
+}
+
+/** Providers the in-app menu may refresh: harvested credentials, or a
+ *  verified Codex WebView session that can be used via the in-page fallback. */
+function appAvailableProviderIds() {
+  const ids = signedInProviderIds();
+  if (hasCodexWebViewSession() && ids.indexOf("codex") === -1) ids.push("codex");
   return ids;
 }
 
@@ -735,8 +751,8 @@ function loadCache() {
   }
 }
 
-/** Atomic-ish write: serialized to a temp file then moved into place; any
- *  failure is swallowed so rendering continues with in-memory data. */
+/** Atomic-ish write: serialized to a temp file then moved into place.
+ *  Returns false when the device storage write fails. */
 function saveCache(cache) {
   try {
     const fm = FileManager.local();
@@ -751,7 +767,10 @@ function saveCache(cache) {
     fm.writeString(temp, json);
     if (fm.fileExists(target)) fm.remove(target);
     fm.move(temp, target);
-  } catch (e) { /* keep going; stale data is better than a crash */ }
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 function clearCacheEntry(provider) {
@@ -1225,14 +1244,17 @@ async function resolveCloudflare(provider) {
  * in-page fetch of /api/organizations (same-origin, so HttpOnly session
  * cookies apply). On success the chat-capable org id is persisted.
  */
-async function validateClaudeHidden() {
+async function validateClaudeHidden(existingWebView) {
   try {
-    const wv = new WebView();
-    installHarvester(wv, "claude");
-    const loaded = await loadWebView(wv, CLAUDE.BASE + "/", 30000);
-    if (!loaded) {
-      // Cookie header may still have been harvested during interactive login.
-      return { ok: cookiesHarvested("claude"), orgId: "", webview: null };
+    let wv = existingWebView || null;
+    if (!wv) {
+      wv = new WebView();
+      installHarvester(wv, "claude");
+      const loaded = await loadWebView(wv, CLAUDE.BASE + "/", 30000);
+      if (!loaded) {
+        // Cookie header may still have been harvested during interactive login.
+        return { ok: cookiesHarvested("claude"), orgId: "", webview: null, unauthenticated: false };
+      }
     }
     const res = await inPageFetch(wv, CLAUDE.ORGS_URL, {
       credentials: "include",
@@ -1244,12 +1266,18 @@ async function validateClaudeHidden() {
         orgId = pickClaudeOrg(JSON.parse(res.body));
       } catch (e) { /* keep orgId empty */ }
       if (orgId) keySet(KEYS.claude.orgId, orgId);
-      return { ok: true, orgId: orgId, webview: wv };
+      return { ok: true, orgId: orgId, webview: wv, unauthenticated: false };
     }
-    // 401-ish responses mean the WebView session is not signed in.
-    return { ok: false, orgId: "", webview: null };
+    // A 401 means the WebView session itself is not signed in. Anything else
+    // (timeout/null/Cloudflare page) is transient and must not log the user out.
+    return {
+      ok: false,
+      orgId: "",
+      webview: null,
+      unauthenticated: !!(res && res.status === 401),
+    };
   } catch (e) {
-    return { ok: false, orgId: "", webview: null };
+    return { ok: false, orgId: "", webview: null, unauthenticated: false };
   }
 }
 
@@ -1279,12 +1307,15 @@ async function claudeInPageUsage(webview, orgId) {
  * Validates a Codex sign-in with a hidden WebView: in-page fetch of
  * /api/auth/session. Returns the access token when the session is live.
  */
-async function validateCodexHidden() {
+async function validateCodexHidden(existingWebView) {
   try {
-    const wv = new WebView();
-    installHarvester(wv, "codex");
-    const loaded = await loadWebView(wv, CODEX.BASE + "/", 30000);
-    if (!loaded) return { ok: false, token: "", webview: null };
+    let wv = existingWebView || null;
+    if (!wv) {
+      wv = new WebView();
+      installHarvester(wv, "codex");
+      const loaded = await loadWebView(wv, CODEX.BASE + "/", 30000);
+      if (!loaded) return { ok: false, token: "", webview: null, unauthenticated: false };
+    }
     const res = await inPageFetch(wv, CODEX.SESSION_URL, {
       credentials: "include",
       headers: { Accept: "application/json" },
@@ -1297,12 +1328,18 @@ async function validateCodexHidden() {
       } catch (e) { /* token stays empty */ }
       if (token) {
         await harvestDocumentState(wv, "codex");
-        return { ok: true, token: token, webview: wv };
+        keySet(KEYS.codex.webviewSession, "1");
+        return { ok: true, token: token, webview: wv, unauthenticated: false };
       }
     }
-    return { ok: false, token: "", webview: null };
+    return {
+      ok: false,
+      token: "",
+      webview: null,
+      unauthenticated: !!(res && res.status === 401),
+    };
   } catch (e) {
-    return { ok: false, token: "", webview: null };
+    return { ok: false, token: "", webview: null, unauthenticated: false };
   }
 }
 
@@ -1335,13 +1372,52 @@ async function codexInPageUsage(webview, token) {
 function signInInstructions(provider) {
   if (provider === "claude") {
     return "Sign in to claude.ai in the next screen.\n\n" +
-      "When the signed-in Claude page is visible, tap Done. " +
-      "Scriptable then reads the session cookie from the page and fetches your usage.";
+      "Do NOT use Continue with Google — Google blocks sign-in inside Scriptable's WebView. " +
+      "Choose Continue with email and use your existing Claude account email (including Gmail). " +
+      "If Claude offers a verification code, enter it there.\n\n" +
+      "If tapping the email link opens Safari instead, copy the link and choose Paste email sign-in link when prompted. " +
+      "Tap Done once the signed-in Claude page is visible.";
   }
   return "Sign in to chatgpt.com in the next screen.\n\n" +
     "Note: Google sign-in is blocked on chatgpt.com — use email or another method. " +
     "When the signed-in ChatGPT page is visible, tap Done. " +
-    "Scriptable then reads the session cookie and fetches your Codex usage.";
+    "Scriptable then verifies the session and fetches your Codex usage.";
+}
+
+/** Only accept an HTTPS link on claude.ai (no credentials, no other hosts). */
+function isClaudeLink(link) {
+  const value = String(link || "").trim();
+  if (!/^https:\/\//i.test(value) || value.indexOf("@") !== -1) return false;
+  const host = urlHost(value);
+  return host === "claude.ai" || host === "www.claude.ai" || host.endsWith(".claude.ai");
+}
+
+/** Lets the user paste the Claude email sign-in link into the same WebView. */
+async function promptClaudeEmailLink(webview) {
+  if (!webview) return false;
+  const alert = new Alert();
+  alert.title = "Paste Claude email link";
+  alert.message =
+    "Google sign-in does not work inside Scriptable.\n\n" +
+    "In Claude, choose Continue with email, open the email, then copy the sign-in link. " +
+    "Paste it below — do not open it in Safari, which would sign in Safari instead.";
+  alert.addTextField("https://claude.ai/...");
+  alert.addAction("Open link");
+  alert.addCancelAction("Cancel");
+  if ((await alert.present()) === -1) return false;
+  const link = String(alert.textFieldValue(0) || "").trim();
+  if (!isClaudeLink(link)) {
+    await showAlert("Invalid link", "Use the https://claude.ai/ link from the Claude sign-in email.", [{ label: "OK" }]);
+    return false;
+  }
+  try {
+    await withTimeout(webview.loadURL(link), 20000, null);
+    await webview.present(true);
+    await harvestDocumentState(webview, "claude");
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 /**
@@ -1372,18 +1448,45 @@ async function signIn(provider) {
 
   let result;
   if (provider === "claude") {
-    result = await validateClaudeHidden();
+    // Validate the interactive WebView first: it is the instance that actually
+    // completed the login. Fall back to a fresh hidden WebView, then to the
+    // email-link loop if Google/embedded OAuth prevented a normal login.
+    result = await validateClaudeHidden(wv);
+    if (!result.ok) result = await validateClaudeHidden();
+    for (let attempt = 0; attempt < 3 && !result.ok; attempt++) {
+      const choice = await showAlert("Claude sign-in", signInInstructions("claude"), [
+        { label: "Check sign-in" },
+        { label: "Paste email sign-in link" },
+        { label: "Cancel" },
+      ]);
+      if (choice === 0) {
+        result = await validateClaudeHidden(wv);
+        if (!result.ok) result = await validateClaudeHidden();
+      } else if (choice === 1) {
+        if (await promptClaudeEmailLink(wv)) {
+          result = await validateClaudeHidden(wv);
+          if (!result.ok) result = await validateClaudeHidden();
+        }
+      } else {
+        break;
+      }
+    }
     if (!result.ok) {
       await showAlert("Not signed in yet",
-        "Claude did not confirm the session. Run setup again and make sure the signed-in page is visible before tapping Done.",
+        result.unauthenticated
+          ? "Claude did not confirm the session. Sign in with Continue with email, then tap Done once the signed-in page is visible."
+          : "Claude could not be reached. Check your connection, then try again or paste the email sign-in link.",
         [{ label: "OK" }]);
       return { ok: false };
     }
   } else {
-    result = await validateCodexHidden();
+    result = await validateCodexHidden(wv);
+    if (!result.ok) result = await validateCodexHidden();
     if (!result.ok) {
       await showAlert("Not signed in yet",
-        "ChatGPT did not confirm the session. Run setup again and make sure the signed-in page is visible before tapping Done.",
+        result.unauthenticated
+          ? "ChatGPT did not confirm the session. Sign in again and make sure the signed-in page is visible before tapping Done."
+          : "ChatGPT could not be reached. Check your connection and try again.",
         [{ label: "OK" }]);
       return { ok: false };
     }
@@ -1412,16 +1515,22 @@ async function signIn(provider) {
   cache[provider] = provider === "claude"
     ? mergeClaudeSnapshot(cache.claude, fetchResult, Date.now())
     : mergeCodexSnapshot(cache.codex, fetchResult, Date.now());
-  saveCache(cache);
+  const saved = saveCache(cache);
 
-  if (!cookiesHarvested(provider)) {
-    // The cookie header was never exposed: the in-page snapshot is kept, but
-    // live widget refresh is unavailable until a login exposes it.
-    await showAlert("Limited refresh",
-      "Signed in, but Scriptable could not expose the session cookie for background refresh. " +
-      "The widget will show this snapshot; reopen the app to update it.",
-      [{ label: "OK" }]);
+  let notice = "";
+  if (!saved) {
+    notice = "Signed in, but Scriptable could not save the usage snapshot on this device. Try Refresh now again.";
+  } else if (fetchResult.kind !== "ok") {
+    notice = "Signed in, but the first usage fetch did not succeed (" +
+      ((fetchResult && fetchResult.reason) || "unknown") +
+      "). Open Scriptable and choose Refresh now.";
+  } else if (!cookiesHarvested(provider)) {
+    // WebKit often hides HttpOnly cookies. The snapshot is still usable, but
+    // automatic background refresh is unavailable.
+    notice = "Signed in in snapshot mode: Scriptable could not expose the session cookie for background refresh. " +
+      "The widget shows this snapshot; open Scriptable and choose Refresh now to update it.";
   }
+  if (notice) await showAlert("Signed in", notice, [{ label: "OK" }]);
   return { ok: true };
 }
 
@@ -1437,6 +1546,7 @@ function signOut(provider) {
     keyRemove(KEYS.codex.cookie);
     keyRemove(KEYS.codex.cfClearance);
     keyRemove(KEYS.codex.userAgent);
+    keyRemove(KEYS.codex.webviewSession);
   }
   clearCacheEntry(provider);
 }
@@ -1612,6 +1722,7 @@ function buildViewState(provider, cache, now) {
   // Without harvested cookies we cannot refresh in the background, but a
   // snapshot captured through the hidden WebView is still worth showing.
   const needsLogin = entry.authState === "needs_login" || (!signedIn && !hasSnapshot);
+  const cacheOnly = hasSnapshot && !signedIn;
   const meters = provider === "claude" ? claudeMeters(entry, now) : codexMeters(entry, now);
   let caption = "";
   if (provider === "codex" && !needsLogin && !entry.fiveHour && entry.weekly) {
@@ -1629,6 +1740,7 @@ function buildViewState(provider, cache, now) {
     meters: meters,
     caption: caption,
     error: entry.error || "",
+    cacheOnly: cacheOnly,
     // Signed in but the first fetch failed: don't pretend the plan has no limits.
     unavailable: !needsLogin && !hasSnapshot && !!entry.error,
     noLimits: !needsLogin && !(!hasSnapshot && !!entry.error) && meters.length === 0,
@@ -1740,6 +1852,24 @@ function addProviderSection(stack, state, opts) {
   }
   addProviderHeader(col, state, opts.compact);
   col.addSpacer(opts.headerGap);
+
+  if (state.cacheOnly) {
+    const ago = updatedAgo(state.fetchedAt, state.now) || "cached";
+    widgetText(col, opts.compact ? "Snapshot" : "Snapshot \u00B7 " + ago, {
+      size: 8,
+      color: colorSecondary(),
+      lineLimit: 1,
+      scale: 0.7,
+    });
+    if (!opts.compact) {
+      widgetText(col, "Open Scriptable \u2192 Refresh now", {
+        size: 8,
+        color: colorSecondary(),
+        lineLimit: 1,
+        scale: 0.7,
+      });
+    }
+  }
 
   if (state.unavailable) {
     widgetText(col, opts.compact ? "Open app" : "Open the app to refresh", {
@@ -2094,6 +2224,9 @@ function describeProviderEntry(provider, entry) {
   if (err === "cloudflare" || err === "cloudflare-unresolved") {
     return meta.short + " — Cloudflare challenge — open the app and Refresh now";
   }
+  if (err === "webview-unavailable") {
+    return meta.short + " — Snapshot mode — open Scriptable and Refresh now";
+  }
   if (err === "network" || err === "timeout") {
     return meta.short + " — Network error — try again";
   }
@@ -2101,6 +2234,10 @@ function describeProviderEntry(provider, entry) {
   if (err === "org-unknown") return meta.short + " — Organization not found — sign in again";
   if (err === "empty") return meta.short + " — No usage limits reported";
   if (err) return meta.short + " — Update failed (" + err + ") — cached data shown";
+  const hasCreds = provider === "claude" ? hasClaudeCreds() : hasCodexCreds();
+  if (entry.fetchedAt > 0 && !hasCreds && entry.authState !== "needs_login") {
+    return meta.short + " — Snapshot mode — open Scriptable and Refresh now";
+  }
   if (provider === "claude") {
     return meta.short + " — 5H: " + formatPct(entry.fiveHour) + "  1W: " + formatPct(entry.sevenDay);
   }
@@ -2112,7 +2249,7 @@ function describeProviderEntry(provider, entry) {
 
 async function refreshNow() {
   const cache = loadCache();
-  const providers = providersToRefresh(signedInProviderIds(), cache);
+  const providers = providersToRefresh(appAvailableProviderIds(), cache);
   if (providers.length === 0) {
     await showAlert("Refresh", "No providers are signed in yet.", [{ label: "OK" }]);
     return;
@@ -2129,10 +2266,18 @@ async function refreshNow() {
       // still carries the signed-in session when cookies are unavailable.
       if (id === "claude") {
         const v = await validateClaudeHidden();
-        if (v.ok && v.orgId && v.webview) result = await claudeInPageUsage(v.webview, v.orgId);
+        if (v.ok && v.orgId && v.webview) {
+          result = await claudeInPageUsage(v.webview, v.orgId);
+        } else if (!v.unauthenticated) {
+          result = { kind: "soft", reason: "webview-unavailable" };
+        }
       } else {
         const v = await validateCodexHidden();
-        if (v.ok && v.token && v.webview) result = await codexInPageUsage(v.webview, v.token);
+        if (v.ok && v.token && v.webview) {
+          result = await codexInPageUsage(v.webview, v.token);
+        } else if (!v.unauthenticated) {
+          result = { kind: "soft", reason: "webview-unavailable" };
+        }
       }
     }
     cache[id] = id === "claude"
@@ -2140,8 +2285,9 @@ async function refreshNow() {
       : mergeCodexSnapshot(cache[id], result, Date.now());
     lines.push(describeProviderEntry(id, cache[id]));
   }
-  saveCache(cache);
-  await showAlert("Refreshed", lines.join("\n"), [{ label: "OK" }]);
+  const saved = saveCache(cache);
+  if (!saved) lines.push("Could not save usage on this device. Try again.");
+  await showAlert(saved ? "Refresh results" : "Refresh results (not saved)", lines.join("\n"), [{ label: "OK" }]);
 }
 
 /** Silent refresh for a Shortcut/automation. No alerts, no interactive login. */
@@ -2244,10 +2390,11 @@ async function showHelp() {
 
 async function runApp() {
   const startCache = loadCache();
+  const available = appAvailableProviderIds();
   const anyData = ["claude", "codex"].some(function (id) {
     return startCache[id] && startCache[id].fetchedAt > 0;
   });
-  const anySignedIn = hasClaudeCreds() || hasCodexCreds() || anyData;
+  const anySignedIn = available.length > 0 || anyData;
   if (!anySignedIn) {
     const choice = await showAlert("Welcome",
       "This Scriptable widget shows your Claude and Codex subscription usage on the home screen and lock screen.\n\n" +
@@ -2269,10 +2416,10 @@ async function runApp() {
   // Main menu — loops until the user picks Cancel.
   for (;;) {
     const cache = loadCache();
+    const availableNow = appAvailableProviderIds();
     const status = ["claude", "codex"]
       .filter(function (id) {
-        const hasCreds = id === "claude" ? hasClaudeCreds() : hasCodexCreds();
-        return hasCreds || (cache[id] && cache[id].fetchedAt > 0);
+        return availableNow.indexOf(id) !== -1 || (cache[id] && cache[id].fetchedAt > 0);
       })
       .map(function (id) { return describeProviderEntry(id, cache[id] || emptyEntry(id)); })
       .join("\n");
@@ -2364,6 +2511,7 @@ if (!IS_SCRIPTABLE && typeof module !== "undefined" && module.exports) {
     mergeCodexSnapshot: mergeCodexSnapshot,
     selectProviders: selectProviders,
     providersToRefresh: providersToRefresh,
+    isClaudeLink: isClaudeLink,
     parseCookieHeader: parseCookieHeader,
     hasSessionCookie: hasSessionCookie,
     hasProviderSession: hasProviderSession,
