@@ -41,7 +41,7 @@ class UsageWidget : GlanceAppWidget() {
             hasData = s.hasSnapshot,
             fiveHourPct = fivePct,
             fiveHourResets = TimeFmt.resetsIn(s.fiveHourReset, now),
-            fiveHourPace = TimeFmt.pace(fivePct, s.fiveHourReset, 18_000L, now),
+            fiveHourRate = computeFiveHourRate(s.fiveHourSamples(), fivePct, s.fiveHourReset, now),
             sevenDayPct = weeklyPct,
             sevenDayResets = TimeFmt.resetsIn(s.sevenDayReset, now),
             weeklyPace = TimeFmt.pace(weeklyPct, s.sevenDayReset, 604_800L, now),

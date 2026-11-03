@@ -11,8 +11,8 @@ enum class Pace(
     val label: String,
     val iconRes: Int,
 ) {
-    UNDER("Under pace", R.drawable.ic_pace_under),
+    UNDER("Under pace, use more", R.drawable.ic_pace_under),
     ON_TRACK("On pace", R.drawable.ic_pace_ok),
-    OVER("Over pace", R.drawable.ic_pace_over),
-    CRITICAL("Critical pace", R.drawable.ic_pace_critical),
+    OVER("Over pace, slow down", R.drawable.ic_pace_over),
+    CRITICAL("Critical pace, stop", R.drawable.ic_pace_critical),
 }

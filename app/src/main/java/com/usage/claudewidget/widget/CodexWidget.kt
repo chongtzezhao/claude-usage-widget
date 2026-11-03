@@ -42,10 +42,10 @@ class CodexWidget : GlanceAppWidget() {
             fiveHourMissing = s.fiveHourMissing,
             fiveHourPct = fivePct,
             fiveHourResets = TimeFmt.resetsIn(s.fiveHourReset, now),
-            fiveHourPace = if (s.fiveHourMissing) {
+            fiveHourRate = if (s.fiveHourMissing) {
                 null
             } else {
-                TimeFmt.pace(fivePct, s.fiveHourReset, 18_000L, now)
+                computeFiveHourRate(s.fiveHourSamples(), fivePct, s.fiveHourReset, now)
             },
             weeklyMissing = s.sevenDayMissing,
             weeklyPct = weeklyPct,

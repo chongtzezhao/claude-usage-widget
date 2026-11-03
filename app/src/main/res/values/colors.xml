@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="accent">#FFD97757</color>
+    <color name="accent_soft">#55D97757</color>
     <color name="codex_accent">#FF10A37F</color>
+    <color name="codex_accent_soft">#5510A37F</color>
     <color name="bar_track">#22000000</color>
     <color name="stale">#FFE0A000</color>
     <color name="pace_under">#FF3B82F6</color>

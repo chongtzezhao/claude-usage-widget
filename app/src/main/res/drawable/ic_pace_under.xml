@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Solid downward arrow: pace under target. -->
+<!-- Four-point sparkle: headroom, use more. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="14dp"
     android:height="14dp"
@@ -8,5 +8,5 @@
 
     <path
         android:fillColor="@color/pace_under"
-        android:pathData="M10,3 L14,3 L14,12 L18,12 L12,19 L6,12 L10,12 Z" />
+        android:pathData="M12,2 L14.2,9.8 L22,12 L14.2,14.2 L12,22 L9.8,14.2 L2,12 L9.8,9.8 Z" />
 </vector>

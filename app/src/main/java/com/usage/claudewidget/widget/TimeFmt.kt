@@ -54,6 +54,18 @@ object TimeFmt {
         }
     }
 
+    /** Short duration label for a local rate projection, e.g. "1h 20m" or "45m". */
+    fun minutesLabel(minutes: Long): String {
+        if (minutes <= 0L) return "now"
+        val h = minutes / 60
+        val m = minutes % 60
+        return when {
+            h > 0L && m > 0L -> "${h}h ${m}m"
+            h > 0L -> "${h}h"
+            else -> "${m}m"
+        }
+    }
+
     /** Human label for a rate-limit window duration; Codex plans vary by tier. */
     fun windowLabel(seconds: Long): String {
         if (seconds <= 0L || seconds == 604_800L) return "1W"
