@@ -80,8 +80,14 @@ class MockListWidget extends MockStack {
 }
 
 class MockColor {
-  constructor(value) { this.value = value; }
-  static dynamic(light, dark) { return new MockColor(["dynamic", light, dark]); }
+  constructor(hex, alpha) {
+    if (typeof hex !== "string") {
+      throw new Error("Scriptable Color expects a hex string, got " + typeof hex);
+    }
+    this.hex = hex;
+    this.alpha = alpha;
+  }
+  static dynamic(light, dark) { return { dynamic: [light, dark] }; }
 }
 
 class MockPath {

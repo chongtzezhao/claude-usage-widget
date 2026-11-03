@@ -879,6 +879,8 @@ function claudeStatusResult(code, body, finalUrl) {
     return { kind: "needs_login" };
   }
   if (isRedirectCode(code)) return { kind: "soft", reason: "http-" + code };
+  // A 200 can still be a Cloudflare challenge page; detect it before parsing.
+  if (code === 200 && looksLikeHtml(body)) return { kind: "soft", reason: "cloudflare" };
   if (code === 200) return null; // handled by caller
   if (code === 403 || code === 503 || looksLikeHtml(body)) {
     return { kind: "soft", reason: "cloudflare" };
@@ -1346,7 +1348,9 @@ async function signIn(provider) {
   installHarvester(wv, provider);
   const loginUrl = provider === "claude" ? CLAUDE.LOGIN_URL : CODEX.LOGIN_URL;
   try {
-    await wv.loadURL(loginUrl);
+    // loadURL resolves only after the page finishes; don't let a stalled
+    // Cloudflare/captive-portal load keep the user from reaching Done.
+    await withTimeout(wv.loadURL(loginUrl), 20000, null);
   } catch (e) { /* the user can still navigate manually */ }
   // Resolves when the user taps Done.
   await wv.present(true);
@@ -1475,7 +1479,7 @@ function drawBarImage(pct, width, height, provider, elapsed) {
   const pTrack = new Path();
   pTrack.addRoundedRect(new Rect(0, 0, W, H), H / 2, H / 2);
   dc.addPath(pTrack);
-  dc.setFillColor(new Color(0.5, 0.5, 0.5, 0.26));
+  dc.setFillColor(new Color("#808080", 0.26));
   dc.fillPath();
 
   // Fill.
@@ -1497,7 +1501,7 @@ function drawBarImage(pct, width, height, provider, elapsed) {
     const pTick = new Path();
     pTick.addRect(new Rect(tickX, 0, tickW, H));
     dc.addPath(pTick);
-    dc.setFillColor(new Color(0.5, 0.5, 0.5, 0.55));
+    dc.setFillColor(new Color("#808080", 0.55));
     dc.fillPath();
   }
 
@@ -1645,7 +1649,7 @@ function addProviderHeader(stack, state, compact) {
         size: 8, color: staleColor(), lineLimit: 1, scale: 0.7,
       });
     }
-    const dot = row.addImage(drawDotImage(7, new Color(COLORS.stale.dark)));
+    const dot = row.addImage(drawDotImage(7, new Color("#E8A400")));
     dot.imageSize = new Size(7, 7);
   }
 }
