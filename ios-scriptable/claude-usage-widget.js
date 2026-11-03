@@ -593,6 +593,20 @@ function selectProviders(widgetParameter, signedInIds) {
   return signed.slice();
 }
 
+/**
+ * Providers that "Refresh now" should attempt. Includes a provider with a
+ * cached snapshot even when no cookie was harvested, so the in-app hidden
+ * WebView fallback can still refresh it on devices where WebKit hides the
+ * HttpOnly session cookie.
+ */
+function providersToRefresh(signedInIds, cache) {
+  const signed = Array.isArray(signedInIds) ? signedInIds : [];
+  return ["claude", "codex"].filter(function (id) {
+    if (signed.indexOf(id) !== -1) return true;
+    return !!(cache && cache[id] && cache[id].fetchedAt > 0);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Device & storage — Scriptable-only code below this point.
 // ---------------------------------------------------------------------------
@@ -2097,14 +2111,12 @@ function describeProviderEntry(provider, entry) {
 }
 
 async function refreshNow() {
-  const providers = ["claude", "codex"].filter(function (id) {
-    return id === "claude" ? hasClaudeCreds() : hasCodexCreds();
-  });
+  const cache = loadCache();
+  const providers = providersToRefresh(signedInProviderIds(), cache);
   if (providers.length === 0) {
     await showAlert("Refresh", "No providers are signed in yet.", [{ label: "OK" }]);
     return;
   }
-  const cache = loadCache();
   const lines = [];
   for (let i = 0; i < providers.length; i++) {
     const id = providers[i];
@@ -2351,6 +2363,7 @@ if (!IS_SCRIPTABLE && typeof module !== "undefined" && module.exports) {
     mergeClaudeSnapshot: mergeClaudeSnapshot,
     mergeCodexSnapshot: mergeCodexSnapshot,
     selectProviders: selectProviders,
+    providersToRefresh: providersToRefresh,
     parseCookieHeader: parseCookieHeader,
     hasSessionCookie: hasSessionCookie,
     hasProviderSession: hasProviderSession,

@@ -31,6 +31,7 @@ const {
   mergeClaudeSnapshot,
   mergeCodexSnapshot,
   selectProviders,
+  providersToRefresh,
   parseCookieHeader,
   hasSessionCookie,
   hasProviderSession,
@@ -819,6 +820,29 @@ describe("selectProviders", () => {
 
   it("ignores unknown signed-in ids", () => {
     assert.deepEqual(selectProviders("both", ["claude", "android"]), ["claude"]);
+  });
+});
+
+describe("providersToRefresh", () => {
+  it("includes providers that are signed in", () => {
+    assert.deepEqual(providersToRefresh(["claude", "codex"], {}), ["claude", "codex"]);
+  });
+
+  it("includes a provider with a cached snapshot but no harvested cookie", () => {
+    const cache = {
+      claude: { fetchedAt: NOW },
+      codex: { fetchedAt: 0 },
+    };
+    assert.deepEqual(providersToRefresh([], cache), ["claude"]);
+  });
+
+  it("returns nothing when no provider is signed in or cached", () => {
+    assert.deepEqual(providersToRefresh([], null), []);
+    assert.deepEqual(providersToRefresh([], { claude: { fetchedAt: 0 } }), []);
+  });
+
+  it("keeps the signed-in provider even when the cache is empty", () => {
+    assert.deepEqual(providersToRefresh(["codex"], { claude: { fetchedAt: 0 } }), ["codex"]);
   });
 });
 
