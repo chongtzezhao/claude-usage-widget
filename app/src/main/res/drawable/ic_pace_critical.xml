@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Warning triangle with exclamation cutout: pace critical. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="14dp"
+    android:height="14dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="@color/pace_critical"
+        android:fillType="evenOdd"
+        android:pathData="M12,2.5 L22.5,20.5 L1.5,20.5 Z M11,9 L13,9 L13,14.5 L11,14.5 Z M12,16.1 a1.4,1.4 0 1,0 0,2.8 a1.4,1.4 0 1,0 0,-2.8 Z" />
+</vector>

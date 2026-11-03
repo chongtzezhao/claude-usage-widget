@@ -34,15 +34,27 @@ class CodexWidget : GlanceAppWidget() {
     private fun readState(context: Context): CodexWidgetState {
         val s = Storage.get(context, Provider.CODEX)
         val now = System.currentTimeMillis()
+        val fivePct = s.fiveHourUtil.coerceAtLeast(0f).roundToInt()
+        val weeklyPct = s.sevenDayUtil.coerceAtLeast(0f).roundToInt()
         return CodexWidgetState(
             needsLogin = !s.isLoggedIn || s.authState == AuthState.NEEDS_LOGIN,
             hasData = s.hasSnapshot,
             fiveHourMissing = s.fiveHourMissing,
-            fiveHourPct = s.fiveHourUtil.coerceAtLeast(0f).roundToInt(),
+            fiveHourPct = fivePct,
             fiveHourResets = TimeFmt.resetsIn(s.fiveHourReset, now),
+            fiveHourPace = if (s.fiveHourMissing) {
+                null
+            } else {
+                TimeFmt.pace(fivePct, s.fiveHourReset, 18_000L, now)
+            },
             weeklyMissing = s.sevenDayMissing,
-            weeklyPct = s.sevenDayUtil.coerceAtLeast(0f).roundToInt(),
+            weeklyPct = weeklyPct,
             weeklyResets = TimeFmt.resetsIn(s.sevenDayReset, now),
+            weeklyPace = if (s.sevenDayMissing) {
+                null
+            } else {
+                TimeFmt.pace(weeklyPct, s.sevenDayReset, s.weeklyWindowSeconds, now)
+            },
             weeklyLabel = TimeFmt.windowLabel(s.weeklyWindowSeconds),
             stale = TimeFmt.isStale(s.fetchedAt, now),
         )

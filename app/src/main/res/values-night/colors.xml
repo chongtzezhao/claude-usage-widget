@@ -4,4 +4,8 @@
     <color name="codex_accent">#FF2FBF9A</color>
     <color name="bar_track">#33FFFFFF</color>
     <color name="stale">#FFFFC233</color>
+    <color name="pace_under">#FF60A5FA</color>
+    <color name="pace_ok">#FF4ADE80</color>
+    <color name="pace_over">#FFFBBF24</color>
+    <color name="pace_critical">#FFF87171</color>
 </resources>

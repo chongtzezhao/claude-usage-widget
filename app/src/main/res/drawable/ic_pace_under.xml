@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solid downward arrow: pace under target. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="14dp"
+    android:height="14dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="@color/pace_under"
+        android:pathData="M10,3 L14,3 L14,12 L18,12 L12,19 L6,12 L10,12 Z" />
+</vector>

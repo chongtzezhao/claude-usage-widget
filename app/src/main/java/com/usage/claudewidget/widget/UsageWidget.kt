@@ -34,13 +34,17 @@ class UsageWidget : GlanceAppWidget() {
     private fun readState(context: Context): WidgetState {
         val s = Storage.get(context)
         val now = System.currentTimeMillis()
+        val fivePct = s.fiveHourUtil.coerceAtLeast(0f).roundToInt()
+        val weeklyPct = s.sevenDayUtil.coerceAtLeast(0f).roundToInt()
         return WidgetState(
             needsLogin = !s.isLoggedIn || s.authState == AuthState.NEEDS_LOGIN,
             hasData = s.hasSnapshot,
-            fiveHourPct = s.fiveHourUtil.coerceAtLeast(0f).roundToInt(),
+            fiveHourPct = fivePct,
             fiveHourResets = TimeFmt.resetsIn(s.fiveHourReset, now),
-            sevenDayPct = s.sevenDayUtil.coerceAtLeast(0f).roundToInt(),
+            fiveHourPace = TimeFmt.pace(fivePct, s.fiveHourReset, 18_000L, now),
+            sevenDayPct = weeklyPct,
             sevenDayResets = TimeFmt.resetsIn(s.sevenDayReset, now),
+            weeklyPace = TimeFmt.pace(weeklyPct, s.sevenDayReset, 604_800L, now),
             stale = TimeFmt.isStale(s.fetchedAt, now),
         )
     }
