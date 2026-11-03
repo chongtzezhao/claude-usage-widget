@@ -3,7 +3,7 @@
 A single-file [Scriptable](https://scriptable.app) script that puts your **Claude** and **OpenAI Codex** subscription usage on your iPhone or iPad home screen and lock screen — the same `5H` and `1W` percentages, reset countdowns, pace marker and stale indicator as the Android app, with no backend and no Apple Developer account.
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/chongtzezhao/claude-usage-widget/master/ios-scriptable/claude-usage-widget.js"><b>Download the script</b></a>
+  <a href="claude-usage-widget.js?raw=1"><b>Download the script</b></a>
   ·
   <a href="TROUBLESHOOTING.md">Troubleshooting</a>
   ·
@@ -36,11 +36,12 @@ Install **Scriptable** from the App Store, then open it once.
 
 ### 2. Import the script
 
-**Option A — from the repo (recommended).** Open the raw file in Safari:
+**Option A — from the repo (recommended).** Open [`ios-scriptable/claude-usage-widget.js`](claude-usage-widget.js), tap **Raw** (top right), select all, copy, then in Scriptable tap **+** (top right), paste, and name the script `claude-usage-widget`. Tap **Done**.
 
-<https://raw.githubusercontent.com/chongtzezhao/claude-usage-widget/master/ios-scriptable/claude-usage-widget.js>
-
-Select all, copy, then in Scriptable tap **+** (top right), paste, and name the script `claude-usage-widget`. Tap **Done**.
+> **Reading this in the PR before it merges?** The default branch is `master` and does not contain this file yet, so a `master` raw URL returns **404**. Use the PR-branch raw URL instead:
+> <https://raw.githubusercontent.com/chongtzezhao/claude-usage-widget/feat/scriptable-ios-widget/ios-scriptable/claude-usage-widget.js>
+> After the PR is merged, the `master` URL works:
+> <https://raw.githubusercontent.com/chongtzezhao/claude-usage-widget/master/ios-scriptable/claude-usage-widget.js>
 
 **Option B — copy/paste.** From the repository, open [`claude-usage-widget.js`](claude-usage-widget.js), copy its full contents, and paste into a new Scriptable script the same way.
 
