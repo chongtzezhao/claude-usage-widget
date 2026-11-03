@@ -1131,14 +1131,20 @@ function hostMatches(url, host) {
  */
 function installHarvester(wv, provider) {
   const host = providerHost(provider);
+  const uaKey = provider === "claude" ? KEYS.claude.userAgent : KEYS.codex.userAgent;
   wv.shouldAllowRequest = function (request) {
     try {
       const url = request && request.url ? String(request.url) : "";
       if (hostMatches(url, host)) {
         const headers = (request && request.headers) || {};
         for (const name in headers) {
-          if (String(name).toLowerCase() === "cookie") {
+          const lower = String(name).toLowerCase();
+          if (lower === "cookie") {
             mergeStoredCookie(provider, headers[name]);
+          } else if (lower === "user-agent" && headers[name]) {
+            // Capture the real WebView UA while we can: Request-based
+            // refreshes must replay it or Cloudflare may reject the cookie.
+            keySet(uaKey, String(headers[name]));
           }
         }
       }
