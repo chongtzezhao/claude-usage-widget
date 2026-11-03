@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Warning triangle with exclamation cutout: pace critical. -->
+<!-- Stop sign: critical, stop. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="14dp"
     android:height="14dp"
@@ -8,6 +8,8 @@
 
     <path
         android:fillColor="@color/pace_critical"
-        android:fillType="evenOdd"
-        android:pathData="M12,2.5 L22.5,20.5 L1.5,20.5 Z M11,9 L13,9 L13,14.5 L11,14.5 Z M12,16.1 a1.4,1.4 0 1,0 0,2.8 a1.4,1.4 0 1,0 0,-2.8 Z" />
+        android:pathData="M7.5,2 L16.5,2 L22,7.5 L22,16.5 L16.5,22 L7.5,22 L2,16.5 L2,7.5 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M6.5,10.5 L17.5,10.5 L17.5,13.5 L6.5,13.5 Z" />
 </vector>

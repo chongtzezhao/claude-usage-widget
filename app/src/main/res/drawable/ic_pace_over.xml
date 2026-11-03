@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Solid upward arrow: pace over target. -->
+<!-- Warning triangle with exclamation cutout: over pace, slow down. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="14dp"
     android:height="14dp"
@@ -8,5 +8,6 @@
 
     <path
         android:fillColor="@color/pace_over"
-        android:pathData="M10,21 L14,21 L14,12 L18,12 L12,5 L6,12 L10,12 Z" />
+        android:fillType="evenOdd"
+        android:pathData="M12,2.5 L22.5,20.5 L1.5,20.5 Z M11,9 L13,9 L13,14.5 L11,14.5 Z M12,16.1 a1.4,1.4 0 1,0 0,2.8 a1.4,1.4 0 1,0 0,-2.8 Z" />
 </vector>

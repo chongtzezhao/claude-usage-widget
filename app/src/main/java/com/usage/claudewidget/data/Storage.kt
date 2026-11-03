@@ -85,6 +85,71 @@ class Storage private constructor(
         get() = AuthState.entries.getOrElse(snapshot.getInt("auth_state", 0)) { AuthState.OK }
         set(v) = snapshot.edit().putInt("auth_state", v.ordinal).apply()
 
+    /**
+     * The last three 5H readings, sampled at the normal ~15-minute cadence.
+     * Returns an empty list when the window reset or the cadence was broken,
+     * so the widget never computes a rate across a gap.
+     */
+    @Synchronized
+    fun fiveHourSamples(): List<FiveHourSample> {
+        val reset = snapshot.getLong("fh_samples_reset", 0L)
+        if (reset <= 0L || reset != fiveHourReset) return emptyList()
+        return decodeFiveHourSamples(snapshot.getString("fh_samples", "").orEmpty())
+    }
+
+    /**
+     * Appends a 5H reading. A changed reset time or a drop in utilisation
+     * starts a new window. An early reading (for example a manual tap) is
+     * ignored so it cannot break the 15-minute cadence; a late reading starts
+     * a new window because the local rate is no longer fresh.
+     */
+    @Synchronized
+    fun recordFiveHourSample(atEpochMs: Long, pct: Float, resetAtEpochMs: Long) {
+        if (atEpochMs <= 0L || pct < 0f || resetAtEpochMs <= 0L) {
+            clearFiveHourSamples()
+            return
+        }
+
+        var samples = fiveHourSamples()
+        val previousReset = snapshot.getLong("fh_samples_reset", 0L)
+        if (previousReset != 0L && previousReset != resetAtEpochMs) samples = emptyList()
+
+        if (samples.isNotEmpty()) {
+            val last = samples.last()
+            val gap = atEpochMs - last.atEpochMs
+            when {
+                pct + 0.01f < last.pct -> samples = emptyList()
+                gap <= 0L -> return
+                gap < FiveHourSampling.GAP_MS - FiveHourSampling.TOLERANCE_MS -> return
+                gap > FiveHourSampling.GAP_MS + FiveHourSampling.TOLERANCE_MS -> samples = emptyList()
+            }
+        }
+
+        val next = (samples + FiveHourSample(atEpochMs, pct)).takeLast(FiveHourSampling.COUNT)
+        snapshot.edit()
+            .putString("fh_samples", encodeFiveHourSamples(next))
+            .putLong("fh_samples_reset", resetAtEpochMs)
+            .apply()
+    }
+
+    @Synchronized
+    fun clearFiveHourSamples() {
+        snapshot.edit()
+            .remove("fh_samples")
+            .remove("fh_samples_reset")
+            .apply()
+    }
+
+    private fun decodeFiveHourSamples(raw: String): List<FiveHourSample> =
+        raw.split(';').mapNotNull { entry ->
+            val at = entry.substringBefore(':', "").toLongOrNull()
+            val pct = entry.substringAfter(':', "").toFloatOrNull()
+            if (at != null && pct != null) FiveHourSample(at, pct) else null
+        }.takeLast(FiveHourSampling.COUNT)
+
+    private fun encodeFiveHourSamples(samples: List<FiveHourSample>): String =
+        samples.joinToString(";") { "${it.atEpochMs}:${it.pct}" }
+
     val hasSnapshot: Boolean get() = fetchedAt > 0L
 
     /** Codex plans may expose only one window; -1f means "not provided by the plan". */
@@ -92,6 +157,11 @@ class Storage private constructor(
     val sevenDayMissing: Boolean get() = sevenDayUtil < 0f
 
     fun saveSnapshot(s: UsageSnapshot) {
+        recordFiveHourSample(
+            s.fetchedAtEpochMs,
+            s.fiveHour.utilization,
+            s.fiveHour.resetsAtEpochMs,
+        )
         snapshot.edit()
             .putFloat("fh_util", s.fiveHour.utilization)
             .putLong("fh_reset", s.fiveHour.resetsAtEpochMs)
@@ -103,6 +173,12 @@ class Storage private constructor(
     }
 
     fun saveCodexSnapshot(s: CodexSnapshot) {
+        val five = s.fiveHour
+        if (five != null) {
+            recordFiveHourSample(s.fetchedAtEpochMs, five.utilization, five.resetsAtEpochMs)
+        } else {
+            clearFiveHourSamples()
+        }
         snapshot.edit()
             .putFloat("fh_util", s.fiveHour?.utilization ?: -1f)
             .putLong("fh_reset", s.fiveHour?.resetsAtEpochMs ?: 0L)

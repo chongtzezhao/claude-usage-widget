@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Small flame: local 5H burn rate. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="10dp"
+    android:height="10dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="@color/pace_over"
+        android:pathData="M12,2 C12,6 8.5,8.5 8.5,12.5 C8.5,16 10.5,19 12,20.5 C13.5,19 15.5,16 15.5,12.5 C15.5,9 13,6.5 12,2 Z" />
+</vector>

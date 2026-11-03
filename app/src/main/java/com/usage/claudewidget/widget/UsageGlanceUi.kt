@@ -2,6 +2,7 @@ package com.usage.claudewidget.widget
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
@@ -33,6 +34,8 @@ import androidx.glance.LocalContext
 import android.content.Intent
 import com.usage.claudewidget.R
 import com.usage.claudewidget.ui.MainActivity
+import java.util.Locale
+import kotlin.math.roundToInt
 
 /** Immutable view state handed to the composable; assembled from Storage on each render. */
 data class WidgetState(
@@ -40,7 +43,7 @@ data class WidgetState(
     val hasData: Boolean,
     val fiveHourPct: Int,
     val fiveHourResets: String,
-    val fiveHourPace: Pace?,
+    val fiveHourRate: FiveHourRate?,
     val sevenDayPct: Int,
     val sevenDayResets: String,
     val weeklyPace: Pace?,
@@ -99,15 +102,15 @@ private fun FullLayout(s: WidgetState) {
                 ),
             )
         }
-        Spacer(GlanceModifier.height(10.dp))
-        MeterRow(
-            "5H",
-            s.fiveHourPct,
-            s.fiveHourResets,
-            s.fiveHourPace,
-            colorProvider(R.color.accent),
+        Spacer(GlanceModifier.height(8.dp))
+        FiveHourRow(
+            pct = s.fiveHourPct,
+            resets = s.fiveHourResets,
+            rate = s.fiveHourRate,
+            color = colorProvider(R.color.accent),
+            softColor = colorProvider(R.color.accent_soft),
         )
-        Spacer(GlanceModifier.height(10.dp))
+        Spacer(GlanceModifier.height(6.dp))
         MeterRow(
             "1W",
             s.sevenDayPct,
@@ -117,6 +120,88 @@ private fun FullLayout(s: WidgetState) {
         )
     }
 }
+
+@Composable
+internal fun FiveHourRow(
+    pct: Int,
+    resets: String,
+    rate: FiveHourRate?,
+    color: ColorProvider,
+    softColor: ColorProvider,
+) {
+    Column(modifier = GlanceModifier.fillMaxWidth()) {
+        Row(
+            modifier = GlanceModifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "5H",
+                style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontWeight = FontWeight.Bold),
+                modifier = GlanceModifier.width(28.dp),
+            )
+            Text(
+                "$pct%",
+                style = TextStyle(color = GlanceTheme.colors.onSurface, fontWeight = FontWeight.Bold),
+            )
+            Spacer(GlanceModifier.defaultWeight())
+            Text(
+                resets,
+                style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant),
+            )
+        }
+        Spacer(GlanceModifier.height(4.dp))
+
+        val caps = rate?.capsInMinutes
+        val ghostColor = when {
+            caps == null -> softColor
+            caps <= 30L -> colorProvider(R.color.pace_critical)
+            else -> colorProvider(R.color.pace_over)
+        }
+        Bar(
+            pct = pct,
+            color = color,
+            projectedPct = rate?.projectedPct,
+            projectedColor = ghostColor,
+        )
+
+        Spacer(GlanceModifier.height(2.dp))
+        RateLine(rate)
+    }
+}
+
+@Composable
+private fun RateLine(rate: FiveHourRate?) {
+    val caps = rate?.capsInMinutes
+    val tint = when {
+        caps == null -> GlanceTheme.colors.onSurfaceVariant
+        caps <= 30L -> colorProvider(R.color.pace_critical)
+        else -> colorProvider(R.color.pace_over)
+    }
+    val label = when {
+        rate == null -> "collecting"
+        rate.pctPerHour < 0.05f -> "idle"
+        caps == null -> "${formatRate(rate.pctPerHour)}/h · fits reset"
+        caps <= 0L -> "${formatRate(rate.pctPerHour)}/h · capped"
+        else -> "${formatRate(rate.pctPerHour)}/h · caps in ${TimeFmt.minutesLabel(caps)}"
+    }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Image(
+            provider = ImageProvider(R.drawable.ic_rate_flame),
+            contentDescription = null,
+            modifier = GlanceModifier.size(10.dp),
+        )
+        Spacer(GlanceModifier.width(3.dp))
+        Text(
+            label,
+            style = TextStyle(color = tint, fontSize = 9.sp),
+            maxLines = 1,
+        )
+    }
+}
+
+private fun formatRate(rate: Float): String =
+    if (rate < 10f) String.format(Locale.US, "%.1f", rate) else rate.roundToInt().toString()
 
 @Composable
 internal fun MeterRow(
@@ -199,13 +284,34 @@ internal fun CompactMeter(
 }
 
 @Composable
-internal fun Bar(pct: Int, color: ColorProvider) {
-    LinearProgressIndicator(
-        progress = (pct.coerceIn(0, 100)) / 100f,
-        modifier = GlanceModifier.fillMaxWidth().height(6.dp).cornerRadius(3.dp),
-        color = color,
-        backgroundColor = colorProvider(R.color.bar_track),
-    )
+internal fun Bar(
+    pct: Int,
+    color: ColorProvider,
+    projectedPct: Int? = null,
+    projectedColor: ColorProvider? = null,
+) {
+    Box(
+        modifier = GlanceModifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .cornerRadius(3.dp)
+            .background(colorProvider(R.color.bar_track)),
+    ) {
+        if (projectedPct != null && projectedColor != null && projectedPct > pct) {
+            LinearProgressIndicator(
+                progress = (projectedPct.coerceIn(0, 100)) / 100f,
+                modifier = GlanceModifier.fillMaxWidth().height(6.dp).cornerRadius(3.dp),
+                color = projectedColor,
+                backgroundColor = ColorProvider(Color.Transparent),
+            )
+        }
+        LinearProgressIndicator(
+            progress = (pct.coerceIn(0, 100)) / 100f,
+            modifier = GlanceModifier.fillMaxWidth().height(6.dp).cornerRadius(3.dp),
+            color = color,
+            backgroundColor = ColorProvider(Color.Transparent),
+        )
+    }
 }
 
 @Composable

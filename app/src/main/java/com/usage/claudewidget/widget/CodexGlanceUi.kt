@@ -36,7 +36,7 @@ data class CodexWidgetState(
     val fiveHourMissing: Boolean,
     val fiveHourPct: Int,
     val fiveHourResets: String,
-    val fiveHourPace: Pace?,
+    val fiveHourRate: FiveHourRate?,
     val weeklyMissing: Boolean,
     val weeklyPct: Int,
     val weeklyResets: String,
@@ -91,7 +91,7 @@ private fun CodexFullLayout(s: CodexWidgetState) {
                 ),
             )
         }
-        Spacer(GlanceModifier.height(10.dp))
+        Spacer(GlanceModifier.height(8.dp))
 
         if (s.fiveHourMissing && s.weeklyMissing) {
             Text(
@@ -102,16 +102,16 @@ private fun CodexFullLayout(s: CodexWidgetState) {
         }
 
         if (!s.fiveHourMissing) {
-            MeterRow(
-                "5H",
-                s.fiveHourPct,
-                s.fiveHourResets,
-                s.fiveHourPace,
-                colorProvider(R.color.codex_accent),
+            FiveHourRow(
+                pct = s.fiveHourPct,
+                resets = s.fiveHourResets,
+                rate = s.fiveHourRate,
+                color = colorProvider(R.color.codex_accent),
+                softColor = colorProvider(R.color.codex_accent_soft),
             )
         }
         if (!s.fiveHourMissing && !s.weeklyMissing) {
-            Spacer(GlanceModifier.height(10.dp))
+            Spacer(GlanceModifier.height(6.dp))
         }
         if (!s.weeklyMissing) {
             MeterRow(
