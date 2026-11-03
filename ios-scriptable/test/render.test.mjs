@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 
 const require = createRequire(import.meta.url);
 
@@ -165,6 +166,14 @@ function installMocks() {
 
 installMocks();
 const widgetScript = require("../claude-usage-widget.js");
+
+test("runtime guard detects Scriptable by its globals, not by module being absent", () => {
+  const source = readFileSync(new URL("../claude-usage-widget.js", import.meta.url), "utf8");
+  assert.match(source, /const IS_SCRIPTABLE/);
+  assert.match(source, /typeof Script !== "undefined"/);
+  assert.match(source, /typeof config !== "undefined"/);
+  assert.doesNotMatch(source, /if \(typeof module === "undefined"\)/);
+});
 
 const NOW = Date.parse("2026-11-04T12:00:00.000Z");
 const HOUR = 3600 * 1000;

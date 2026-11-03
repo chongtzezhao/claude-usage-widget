@@ -2309,7 +2309,13 @@ async function main() {
   await runApp();
 }
 
-if (typeof module === "undefined") {
+// Scriptable treats every file as a module, so `module` is defined there too.
+// Detect Scriptable by its globals instead of by `module` being absent.
+const IS_SCRIPTABLE =
+  typeof Script !== "undefined" &&
+  typeof config !== "undefined";
+
+if (IS_SCRIPTABLE) {
   main().catch(async function (err) {
     // Friendly failure; never expose cookie values in the message.
     const inApp = typeof config !== "undefined" && (config.runsInApp || config.runsWithSiri);
@@ -2332,7 +2338,7 @@ if (typeof module === "undefined") {
 // Node-testable exports (pure helpers only; no Scriptable APIs here)
 // ---------------------------------------------------------------------------
 
-if (typeof module !== "undefined" && module.exports) {
+if (!IS_SCRIPTABLE && typeof module !== "undefined" && module.exports) {
   module.exports = {
     CONFIG: CONFIG,
     CLAUDE: CLAUDE,
