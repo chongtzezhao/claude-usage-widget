@@ -2068,7 +2068,11 @@ async function showAlert(title, message, optionLabels) {
   const alert = new Alert();
   alert.title = title;
   alert.message = message;
-  (optionLabels || []).forEach(function (label) { alert.addAction(label); });
+  (optionLabels || []).forEach(function (option) {
+    // Accept either "OK" or { label: "OK" }; Alert.addAction requires a string.
+    const label = typeof option === "string" ? option : (option && option.label);
+    alert.addAction(String(label == null ? "" : label));
+  });
   const index = await alert.present();
   return typeof index === "number" ? index : 0;
 }
@@ -2365,6 +2369,7 @@ if (!IS_SCRIPTABLE && typeof module !== "undefined" && module.exports) {
     codexWindowFrom: codexWindowFrom,
     normalizeCodexEntry: normalizeCodexEntry,
     buildWidget: buildWidget,
+    showAlert: showAlert,
     looksLikeHtml: looksLikeHtml,
   };
 }

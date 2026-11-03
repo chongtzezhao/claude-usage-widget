@@ -127,6 +127,17 @@ class MockKeychain {
   clear() { this.values.clear(); }
 }
 
+class MockAlert {
+  constructor() { this.actions = []; }
+  addAction(label) {
+    if (typeof label !== "string") {
+      throw new Error("Alert.addAction expects a string, got " + typeof label);
+    }
+    this.actions.push(label);
+  }
+  async present() { return 0; }
+}
+
 function installMocks() {
   const keychain = new MockKeychain();
   const files = new Map();
@@ -173,6 +184,17 @@ test("runtime guard detects Scriptable by its globals, not by module being absen
   assert.match(source, /typeof Script !== "undefined"/);
   assert.match(source, /typeof config !== "undefined"/);
   assert.doesNotMatch(source, /if \(typeof module === "undefined"\)/);
+});
+
+test("showAlert accepts { label } objects and plain strings", async () => {
+  const previous = globalThis.Alert;
+  globalThis.Alert = MockAlert;
+  try {
+    assert.equal(await widgetScript.showAlert("Title", "Message", [{ label: "OK" }]), 0);
+    assert.equal(await widgetScript.showAlert("Title", "Message", ["Yes", "No"]), 0);
+  } finally {
+    globalThis.Alert = previous;
+  }
 });
 
 const NOW = Date.parse("2026-11-04T12:00:00.000Z");
