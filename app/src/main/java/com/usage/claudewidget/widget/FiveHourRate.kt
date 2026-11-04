@@ -2,11 +2,10 @@ package com.usage.claudewidget.widget
 
 import com.usage.claudewidget.data.FiveHourSample
 import com.usage.claudewidget.data.FiveHourSampling
-import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
-/** Local 5H burn rate derived from the last three 15-minute samples. */
+/** Local 5H burn rate derived from the recent 5H readings. */
 data class FiveHourRate(
     val pctPerHour: Float,
     val projectedPct: Int,
@@ -14,8 +13,13 @@ data class FiveHourRate(
 )
 
 /**
- * Computes the local burn rate from exactly three readings at the normal
- * 15-minute cadence. Returns null when there is no trustworthy local rate.
+ * Computes the local burn rate from the readings in the current 5H window.
+ *
+ * The interval between readings is whatever WorkManager and JobScheduler
+ * deliver (15 minutes at best, often an hour), so this accepts any span between
+ * [FiveHourSampling.MIN_SPAN_MS] and [FiveHourSampling.MAX_SPAN_MS] and only
+ * trusts readings that are recent. Returns null when there is no trustworthy
+ * local rate.
  */
 fun computeFiveHourRate(
     samples: List<FiveHourSample>,
@@ -23,17 +27,22 @@ fun computeFiveHourRate(
     resetAtEpochMs: Long,
     now: Long,
 ): FiveHourRate? {
-    if (samples.size != FiveHourSampling.COUNT || resetAtEpochMs <= now) return null
+    if (samples.size < FiveHourSampling.MIN_COUNT || resetAtEpochMs <= now) return null
 
-    val first = samples[0]
-    val second = samples[1]
-    val last = samples[2]
-    if (!isCadence(second.atEpochMs - first.atEpochMs)) return null
-    if (!isCadence(last.atEpochMs - second.atEpochMs)) return null
+    val last = samples.last()
+    if (now - last.atEpochMs > FiveHourSampling.MAX_AGE_MS) return null
 
-    val spanHours = (last.atEpochMs - first.atEpochMs) / 3_600_000.0
-    if (spanHours <= 0.0) return null
+    // Use the freshest window that still fits the span bound; older readings
+    // describe a previous pace, not the current one.
+    val cutoff = last.atEpochMs - FiveHourSampling.MAX_SPAN_MS
+    val window = samples.filter { it.atEpochMs >= cutoff }
+    if (window.size < FiveHourSampling.MIN_COUNT) return null
 
+    val first = window.first()
+    val spanMs = last.atEpochMs - first.atEpochMs
+    if (spanMs < FiveHourSampling.MIN_SPAN_MS) return null
+
+    val spanHours = spanMs / 3_600_000.0
     val rawRate = (last.pct - first.pct) / spanHours
     val rate = if (rawRate.isFinite()) rawRate.coerceAtLeast(0.0) else 0.0
     val hoursToReset = (resetAtEpochMs - now) / 3_600_000.0
@@ -49,6 +58,3 @@ fun computeFiveHourRate(
 
     return FiveHourRate(rate.toFloat(), projected.roundToInt(), capsInMinutes)
 }
-
-private fun isCadence(gapMs: Long): Boolean =
-    gapMs >= 0L && abs(gapMs - FiveHourSampling.GAP_MS) <= FiveHourSampling.TOLERANCE_MS

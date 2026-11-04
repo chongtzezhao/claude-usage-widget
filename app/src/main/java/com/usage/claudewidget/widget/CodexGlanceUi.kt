@@ -108,6 +108,7 @@ private fun CodexFullLayout(s: CodexWidgetState) {
                 rate = s.fiveHourRate,
                 color = colorProvider(R.color.codex_accent),
                 softColor = colorProvider(R.color.codex_accent_soft),
+                stale = s.stale,
             )
         }
         if (!s.fiveHourMissing && !s.weeklyMissing) {

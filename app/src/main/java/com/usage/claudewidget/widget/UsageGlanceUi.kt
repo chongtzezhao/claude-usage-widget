@@ -109,6 +109,7 @@ private fun FullLayout(s: WidgetState) {
             rate = s.fiveHourRate,
             color = colorProvider(R.color.accent),
             softColor = colorProvider(R.color.accent_soft),
+            stale = s.stale,
         )
         Spacer(GlanceModifier.height(6.dp))
         MeterRow(
@@ -128,6 +129,7 @@ internal fun FiveHourRow(
     rate: FiveHourRate?,
     color: ColorProvider,
     softColor: ColorProvider,
+    stale: Boolean,
 ) {
     Column(modifier = GlanceModifier.fillMaxWidth()) {
         Row(
@@ -165,12 +167,12 @@ internal fun FiveHourRow(
         )
 
         Spacer(GlanceModifier.height(2.dp))
-        RateLine(rate)
+        RateLine(rate, stale)
     }
 }
 
 @Composable
-private fun RateLine(rate: FiveHourRate?) {
+private fun RateLine(rate: FiveHourRate?, stale: Boolean) {
     val caps = rate?.capsInMinutes
     val tint = when {
         caps == null -> GlanceTheme.colors.onSurfaceVariant
@@ -178,7 +180,8 @@ private fun RateLine(rate: FiveHourRate?) {
         else -> colorProvider(R.color.pace_over)
     }
     val label = when {
-        rate == null -> "collecting"
+        // "collecting" is honest only while the readings are still fresh.
+        rate == null -> if (stale) "stale" else "collecting"
         rate.pctPerHour < 0.05f -> "idle"
         caps == null -> "${formatRate(rate.pctPerHour)}/h · fits reset"
         caps <= 0L -> "${formatRate(rate.pctPerHour)}/h · capped"

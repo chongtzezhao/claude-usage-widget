@@ -30,7 +30,10 @@ class RefreshWorker(context: Context, params: WorkerParameters) :
         return when (result) {
             is FetchResult.Success, is FetchResult.CodexSuccess,
             is FetchResult.NeedsLogin -> Result.success()
-            is FetchResult.Soft -> Result.retry() // transient; let WorkManager back off
+            // Transient failures (Cloudflare, flaky network) are normal. The next
+            // periodic run is minutes away, and retrying with exponential backoff
+            // would stretch it to hours.
+            is FetchResult.Soft -> Result.success()
         }
     }
 
