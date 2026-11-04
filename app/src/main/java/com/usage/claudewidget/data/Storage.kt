@@ -86,49 +86,44 @@ class Storage private constructor(
         set(v) = snapshot.edit().putInt("auth_state", v.ordinal).apply()
 
     /**
-     * The last three 5H readings, sampled at the normal ~15-minute cadence.
-     * Returns an empty list when the window reset or the cadence was broken,
-     * so the widget never computes a rate across a gap.
+     * The recent 5H readings. Returns an empty list when the stored readings
+     * belong to a different 5H window, so the widget never computes a rate
+     * across a reset. The readings themselves may be any distance apart.
      */
     @Synchronized
     fun fiveHourSamples(): List<FiveHourSample> {
         val reset = snapshot.getLong("fh_samples_reset", 0L)
-        if (reset <= 0L || reset != fiveHourReset) return emptyList()
+        if (reset <= 0L || !sameWindow(reset, fiveHourReset)) return emptyList()
         return decodeFiveHourSamples(snapshot.getString("fh_samples", "").orEmpty())
     }
 
     /**
-     * Appends a 5H reading. A changed reset time or a drop in utilisation
-     * starts a new window. An early reading (for example a manual tap) is
-     * ignored so it cannot break the 15-minute cadence; a late reading starts
-     * a new window because the local rate is no longer fresh.
+     * Appends a 5H reading. A new 5H window (reset time jumped, or utilisation
+     * fell) starts the buffer over; a slow refresh does not, because the OS
+     * never delivers the requested 15-minute cadence. The readings and the
+     * reset they belong to are committed together so a render can never see
+     * them disagree.
      */
     @Synchronized
     fun recordFiveHourSample(atEpochMs: Long, pct: Float, resetAtEpochMs: Long) {
-        if (atEpochMs <= 0L || pct < 0f || resetAtEpochMs <= 0L) {
+        val previousReset = snapshot.getLong("fh_samples_reset", 0L)
+        val next = mergeFiveHourSamples(
+            existing = fiveHourSamples(),
+            previousResetAtEpochMs = previousReset,
+            atEpochMs = atEpochMs,
+            pct = pct,
+            resetAtEpochMs = resetAtEpochMs,
+        )
+        if (next.isEmpty()) {
             clearFiveHourSamples()
             return
         }
-
-        var samples = fiveHourSamples()
-        val previousReset = snapshot.getLong("fh_samples_reset", 0L)
-        if (previousReset != 0L && previousReset != resetAtEpochMs) samples = emptyList()
-
-        if (samples.isNotEmpty()) {
-            val last = samples.last()
-            val gap = atEpochMs - last.atEpochMs
-            when {
-                pct + 0.01f < last.pct -> samples = emptyList()
-                gap <= 0L -> return
-                gap < FiveHourSampling.GAP_MS - FiveHourSampling.TOLERANCE_MS -> return
-                gap > FiveHourSampling.GAP_MS + FiveHourSampling.TOLERANCE_MS -> samples = emptyList()
-            }
-        }
-
-        val next = (samples + FiveHourSample(atEpochMs, pct)).takeLast(FiveHourSampling.COUNT)
         snapshot.edit()
             .putString("fh_samples", encodeFiveHourSamples(next))
             .putLong("fh_samples_reset", resetAtEpochMs)
+            // Keep the window keys in the same commit; saveSnapshot writes the
+            // same value again and a render can never catch them mid-flight.
+            .putLong("fh_reset", resetAtEpochMs)
             .apply()
     }
 
