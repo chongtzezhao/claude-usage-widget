@@ -20,9 +20,49 @@ object CookieHarvester {
             cookie.startsWith("$name=") || cookie.startsWith("$name.")
         }
 
-    /** Removes the provider's WebView cookies so sign-in starts from a clean jar. */
+    /**
+     * Removes the provider's WebView cookies so sign-in starts from a clean jar.
+     *
+     * Must be safe on the main thread before a WebView is created: [CookieManager]
+     * is a process-wide singleton and this only issues synchronous jar writes.
+     */
     fun clear(provider: Provider) {
-        // Implemented by the auth slice.
+        val cookies = CookieManager.getInstance()
+        // Rebuild nothing: an expired cookie only needs its name.
+        for (origin in origins(provider)) {
+            for (name in cookieNames(cookies.getCookie(origin).orEmpty())) {
+                cookies.setCookie(origin, "$name=; Max-Age=0; Path=/; Secure")
+            }
+        }
+        cookies.flush()
+
+        // Expiring names can miss cookies the jar still replays under a rotated or
+        // host-only name (Auth.js has used several). A leftover session would let
+        // the login screen's capture loop harvest a stale session again, so drop the
+        // whole jar as a last resort: a clean sign-in beats a half-cleared one.
+        if (hasProviderSession(cookies.getCookie(provider.base).orEmpty(), provider)) {
+            cookies.removeAllCookies(null)
+            cookies.flush()
+        }
+    }
+
+    /** Cookie names in a `name=value; name=value` jar string; values are ignored. */
+    fun cookieNames(raw: String): List<String> =
+        raw.split(';')
+            .mapNotNull { part ->
+                val end = part.indexOf('=')
+                if (end <= 0) null else part.substring(0, end).trim().takeIf { it.isNotEmpty() }
+            }
+            .distinct()
+
+    private fun origins(provider: Provider): List<String> = when (provider) {
+        Provider.CLAUDE -> listOf(Provider.CLAUDE.base)
+        Provider.CODEX -> listOf(
+            Provider.CODEX.base,
+            "https://auth.openai.com",
+            "https://external.auth.openai.com",
+            "https://openai.com",
+        )
     }
 
     /** Codex has rotated its session-cookie name across Auth.js versions. */
