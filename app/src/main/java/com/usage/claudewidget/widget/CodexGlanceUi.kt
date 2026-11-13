@@ -3,6 +3,7 @@ package com.usage.claudewidget.widget
 import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.Image
@@ -29,6 +30,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.usage.claudewidget.R
 import com.usage.claudewidget.ui.MainActivity
+import java.util.Locale
 
 data class CodexWidgetState(
     val needsLogin: Boolean,
@@ -41,6 +43,8 @@ data class CodexWidgetState(
     val weeklyPct: Int,
     val weeklyResets: String,
     val weeklyPace: Pace?,
+    /** Estimated fully-used 5H sessions the remaining weekly quota covers; null when unknown. */
+    val sessionsLeft: Float?,
     val weeklyLabel: String,
     val stale: Boolean,
 )
@@ -89,7 +93,23 @@ private fun CodexFullLayout(s: CodexWidgetState) {
                     color = GlanceTheme.colors.onSurface,
                     fontWeight = FontWeight.Medium,
                 ),
+                maxLines = 1,
             )
+            Spacer(GlanceModifier.defaultWeight())
+            // The estimate spans both windows, so single-window plans get no badge.
+            if (!s.fiveHourMissing && !s.weeklyMissing) {
+                val sessions = s.sessionsLeft
+                if (sessions != null && sessions.isFinite() && sessions >= 0f) {
+                    Text(
+                        formatSessionsLeft(sessions),
+                        style = TextStyle(
+                            color = GlanceTheme.colors.onSurfaceVariant,
+                            fontSize = 8.sp,
+                        ),
+                        maxLines = 1,
+                    )
+                }
+            }
         }
         Spacer(GlanceModifier.height(8.dp))
 
@@ -191,3 +211,6 @@ private fun CodexGlyph(size: androidx.compose.ui.unit.Dp) {
         modifier = GlanceModifier.size(size),
     )
 }
+
+private fun formatSessionsLeft(sessions: Float): String =
+    "≈" + String.format(Locale.US, "%.1f", sessions) + "×5H"

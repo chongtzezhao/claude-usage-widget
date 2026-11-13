@@ -56,6 +56,7 @@ class CodexWidget : GlanceAppWidget() {
                 TimeFmt.pace(weeklyPct, s.sevenDayReset, s.weeklyWindowSeconds, now)
             },
             weeklyLabel = TimeFmt.windowLabel(s.weeklyWindowSeconds),
+            sessionsLeft = s.remainingFullSessions(now),
             stale = TimeFmt.isStale(s.fetchedAt, now),
         )
     }
