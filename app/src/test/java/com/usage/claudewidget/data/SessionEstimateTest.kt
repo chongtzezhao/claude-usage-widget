@@ -11,7 +11,6 @@ class SessionEstimateTest {
     private val start = 1_700_000_000_000L
     private val fiveHour = 5 * 60 * 60 * 1000L
     private val fifteenMin = 15 * 60 * 1000L
-    private val fortyFiveMin = 45 * 60 * 1000L
     private val reset5 = start + fiveHour
     private val weekReset = start + 4 * 24 * fiveHour
 
@@ -141,17 +140,94 @@ class SessionEstimateTest {
 
     @Test
     fun windowEndingLongBeforeTheFiveHourResetIsSkipped() {
+        // WorkManager batches refreshes to roughly hourly, so the slack allows
+        // the last reading to be up to 90 minutes before the reset.
+        val slack = SessionEstimate.RESET_SLACK_MS
+        assertEquals(90 * 60 * 1000L, slack)
         val late = listOf(
-            record(reset5 - 3 * fifteenMin, 20f, 10f),
-            record(reset5 - fortyFiveMin - 1, 50f, 22f),
+            record(reset5 - slack - fifteenMin, 20f, 10f),
+            record(reset5 - slack - 1, 50f, 22f),
         )
         val justInTime = listOf(
-            record(reset5 - 3 * fifteenMin, 20f, 10f),
-            record(reset5 - fortyFiveMin, 50f, 22f),
+            record(reset5 - slack - fifteenMin, 20f, 10f),
+            record(reset5 - slack, 50f, 22f),
         )
 
         assertNull(SessionEstimate.windowSample(late))
         assertEquals(40f, SessionEstimate.windowSample(justInTime)!!, 0f)
+    }
+
+    @Test
+    fun fiveHourResetDriftWithinToleranceStaysOneWindow() {
+        // Reset times move a little between fetches; still the same window.
+        // The endpoints sit exactly five minutes apart, the tolerance.
+        val drift = FiveHourSampling.RESET_TOLERANCE_MS / 2
+        val window = listOf(
+            record(reset5 - 2 * fifteenMin, 20f, 10f, fiveReset = reset5 - drift),
+            record(reset5 - fifteenMin, 35f, 16f, fiveReset = reset5),
+            record(reset5, 50f, 22f, fiveReset = reset5 + drift),
+        )
+
+        assertEquals(40f, SessionEstimate.windowSample(window)!!, 0f)
+    }
+
+    @Test
+    fun fiveHourResetDriftBeyondToleranceIsRejected() {
+        // A jump past the tolerance is a different window, not drift.
+        val window = listOf(
+            record(reset5 - fifteenMin, 20f, 10f),
+            record(
+                reset5,
+                50f,
+                22f,
+                fiveReset = reset5 + FiveHourSampling.RESET_TOLERANCE_MS + 1,
+            ),
+        )
+
+        assertNull(SessionEstimate.windowSample(window))
+    }
+
+    @Test
+    fun weeklyResetDriftWithinToleranceDoesNotDisqualifyTheWindow() {
+        val drift = FiveHourSampling.RESET_TOLERANCE_MS / 2
+        val window = listOf(
+            record(reset5 - fifteenMin, 20f, 10f, weekResetMs = weekReset - drift),
+            record(reset5, 50f, 22f, weekResetMs = weekReset + drift),
+        )
+
+        assertEquals(40f, SessionEstimate.windowSample(window)!!, 0f)
+    }
+
+    @Test
+    fun weeklyResetBeyondToleranceDisqualifiesTheWindow() {
+        val window = listOf(
+            record(reset5 - fifteenMin, 20f, 10f),
+            record(
+                reset5,
+                50f,
+                22f,
+                weekResetMs = weekReset + FiveHourSampling.RESET_TOLERANCE_MS + 1,
+            ),
+        )
+
+        assertNull(SessionEstimate.windowSample(window))
+    }
+
+    @Test
+    fun zeroResetRecordsStayRejectedDespiteTheTolerance() {
+        val zeroFive = listOf(
+            record(reset5 - fifteenMin, 20f, 10f, fiveReset = 0L),
+            record(reset5, 50f, 22f, fiveReset = 0L),
+        )
+        val zeroWeek = listOf(
+            record(reset5 - fifteenMin, 20f, 10f, weekResetMs = 0L),
+            record(reset5, 50f, 22f, weekResetMs = 0L),
+        )
+
+        assertNull(SessionEstimate.windowSample(zeroFive))
+        assertNull(SessionEstimate.windowSample(zeroWeek))
+        assertFalse(SessionEstimate.isUsableRecord(record(reset5, 50f, 22f, fiveReset = 0L)))
+        assertFalse(SessionEstimate.isUsableRecord(record(reset5, 50f, 22f, weekResetMs = 0L)))
     }
 
     // ---- remainingFullSessions ----

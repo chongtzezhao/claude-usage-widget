@@ -157,11 +157,18 @@ class Storage private constructor(
         SessionEstimate.decodeHistory(snapshot.getString("usage_history", "").orEmpty())
 
     /**
-     * Appends a usable record to [editor]. A changed 5H reset closes the
-     * previous window, whose calibration sample is folded into the stored EWMA
-     * when it carries signal. Records with unknown resets or bad numbers, and
-     * refreshes less than [SessionEstimate.MIN_RECORD_GAP_MS] into the same
-     * window, are ignored so bursts cannot manufacture tiny windows.
+     * Appends a usable record to [editor]. A changed 5H reset (beyond
+     * [sameWindow]'s drift tolerance) closes the previous window, whose
+     * calibration sample is folded into the stored EWMA when it carries
+     * signal. Records with unknown resets or bad numbers, and refreshes less
+     * than [SessionEstimate.MIN_RECORD_GAP_MS] into the same window, are
+     * ignored so bursts cannot manufacture tiny windows.
+     *
+     * Reset timestamps drift slightly between fetches, so "same window" and
+     * "weekly reset happened" both use [sameWindow]'s tolerance instead of
+     * strict equality. Claude and Codex share this code; each call writes to
+     * its own provider's snapshot prefs file, so their histories and EWMAs
+     * never mix.
      */
     @Synchronized
     private fun appendUsage(editor: SharedPreferences.Editor, record: UsageRecord) {
@@ -170,7 +177,7 @@ class Storage private constructor(
         val last = history.lastOrNull()
         if (last != null) {
             if (record.atEpochMs <= last.atEpochMs) return
-            if (record.fiveHourResetMs == last.fiveHourResetMs &&
+            if (sameWindow(record.fiveHourResetMs, last.fiveHourResetMs) &&
                 record.atEpochMs - last.atEpochMs < SessionEstimate.MIN_RECORD_GAP_MS
             ) {
                 return
@@ -178,9 +185,9 @@ class Storage private constructor(
         }
 
         val closed = last?.let {
-            if (it.fiveHourResetMs == record.fiveHourResetMs) return@let null
+            if (sameWindow(it.fiveHourResetMs, record.fiveHourResetMs)) return@let null
             SessionEstimate.windowSample(
-                history.takeLastWhile { r -> r.fiveHourResetMs == it.fiveHourResetMs }
+                history.takeLastWhile { r -> sameWindow(r.fiveHourResetMs, it.fiveHourResetMs) }
             )
         }
 
@@ -249,6 +256,13 @@ class Storage private constructor(
             .apply()
     }
 
+    /**
+     * Persists a Codex snapshot and, when the plan exposes both windows,
+     * records the same history/calibration Claude keeps. Weekly-only and
+     * 5H-only plans record nothing: a weekly delta is meaningless without a
+     * matching 5H window. The history shares the snapshot editor so the
+     * record commits atomically with the values the widget renders.
+     */
     fun saveCodexSnapshot(s: CodexSnapshot) {
         val five = s.fiveHour
         if (five != null) {
@@ -256,7 +270,22 @@ class Storage private constructor(
         } else {
             clearFiveHourSamples()
         }
-        snapshot.edit()
+        // One editor: history, calibration and the snapshot commit atomically.
+        val editor = snapshot.edit()
+        val weekly = s.weekly
+        if (five != null && weekly != null) {
+            appendUsage(
+                editor,
+                UsageRecord(
+                    atEpochMs = s.fetchedAtEpochMs,
+                    fiveHourPct = five.utilization,
+                    fiveHourResetMs = five.resetsAtEpochMs,
+                    weekPct = weekly.utilization,
+                    weekResetMs = weekly.resetsAtEpochMs,
+                ),
+            )
+        }
+        editor
             .putFloat("fh_util", s.fiveHour?.utilization ?: -1f)
             .putLong("fh_reset", s.fiveHour?.resetsAtEpochMs ?: 0L)
             .putFloat("wk_util", s.weekly?.utilization ?: -1f)

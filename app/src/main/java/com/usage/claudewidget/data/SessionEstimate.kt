@@ -28,6 +28,9 @@ data class SessionCalibration(
  * points that window consumed: 100 * dWeek / dFive. Windows worth trusting are
  * folded into an EWMA; the estimate then divides the remaining weekly quota by
  * that figure and clamps it by the time left in the week.
+ *
+ * Claude and Codex calibrate independently: each provider records its own
+ * history and EWMA in its own snapshot prefs file.
  */
 object SessionEstimate {
     /** Newest records kept in the rolling usage history (~7 days at 15 minutes). */
@@ -45,8 +48,12 @@ object SessionEstimate {
     /** One 5H session cannot consume more than the whole weekly quota. */
     const val MAX_POINTS_PER_SESSION = 100f
 
-    /** A window's last reading must be this close to the 5H reset. */
-    const val RESET_SLACK_MS = 45 * 60 * 1000L
+    /**
+     * A window's last reading must be this close to the 5H reset. WorkManager
+     * batches refreshes to roughly hourly, so the last reading of a window can
+     * legitimately be up to an hour before the reset.
+     */
+    const val RESET_SLACK_MS = 90 * 60 * 1000L
 
     const val FIVE_HOUR_MS = 5 * 60 * 60 * 1000L
 
@@ -82,6 +89,12 @@ object SessionEstimate {
     /**
      * The calibration sample one closed 5H window yields, or null when the
      * window carries no usable signal.
+     *
+     * Reset timestamps drift slightly between fetches, so records belong to
+     * one window when their 5H resets are within [sameWindow]'s tolerance
+     * rather than exactly equal. The same tolerance decides whether the weekly
+     * reset happened inside the window. Records with non-positive resets stay
+     * unusable. Both providers use this, each against its own prefs history.
      */
     fun windowSample(window: List<UsageRecord>): Float? {
         if (window.size < 2) return null
@@ -89,9 +102,9 @@ object SessionEstimate {
         val last = window.last()
         if (first.fiveHourResetMs <= 0L) return null
         // Mixed resets mean the list is not one window; never calibrate from it.
-        if (window.any { it.fiveHourResetMs != first.fiveHourResetMs }) return null
+        if (window.any { !sameWindow(it.fiveHourResetMs, first.fiveHourResetMs) }) return null
         // A weekly reset inside the window makes the weekly delta meaningless.
-        if (window.any { it.weekResetMs != first.weekResetMs }) return null
+        if (window.any { !sameWindow(it.weekResetMs, first.weekResetMs) }) return null
         if (first.fiveHourPct < 0f || last.fiveHourPct < 0f) return null
         if (first.weekPct < 0f || last.weekPct < 0f) return null
         if (!first.fiveHourPct.isFinite() || !last.fiveHourPct.isFinite()) return null
