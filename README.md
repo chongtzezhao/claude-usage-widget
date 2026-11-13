@@ -61,6 +61,7 @@ Anthropic and OpenAI provide no public API for consumer subscription usage. Thes
 
 - **Two providers, two widgets, one APK.** Add Claude Usage, Codex Usage, or both.
 - **Rolling windows at a glance.** 5-hour and 1-week percentages, with a live countdown to each reset, a weekly pace marker, and a local 5H burn rate. Codex plans that only expose a weekly cap show a weekly-only layout instead of a fake 5H bar.
+- **How many sessions are left.** The Claude widget's full layout also shows an estimated number of remaining fully-used 5H sessions (`≈N×5H`), EWMA-calibrated from recorded history and hidden until enough data exists.
 - **Refreshes itself.** A background job updates each provider every ~15 minutes; tap a widget to force an immediate refresh.
 - **Sign in once per provider.** A single `claude.ai` or `chatgpt.com` login; you only re-authenticate when that session finally expires.
 - **Resizes freely.** Each widget snaps between a compact and a full layout, and adapts to light & dark themes.

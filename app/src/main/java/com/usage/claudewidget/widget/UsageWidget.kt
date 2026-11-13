@@ -45,6 +45,7 @@ class UsageWidget : GlanceAppWidget() {
             sevenDayPct = weeklyPct,
             sevenDayResets = TimeFmt.resetsIn(s.sevenDayReset, now),
             weeklyPace = TimeFmt.pace(weeklyPct, s.sevenDayReset, 604_800L, now),
+            sessionsLeft = s.remainingFullSessions(now),
             stale = TimeFmt.isStale(s.fetchedAt, now),
         )
     }

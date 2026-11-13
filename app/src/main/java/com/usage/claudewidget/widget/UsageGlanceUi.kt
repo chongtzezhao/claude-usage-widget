@@ -47,6 +47,8 @@ data class WidgetState(
     val sevenDayPct: Int,
     val sevenDayResets: String,
     val weeklyPace: Pace?,
+    /** Estimated fully-used 5H sessions the remaining weekly quota covers; null when unknown. */
+    val sessionsLeft: Float?,
     val stale: Boolean,
 )
 
@@ -101,6 +103,18 @@ private fun FullLayout(s: WidgetState) {
                     fontWeight = FontWeight.Medium,
                 ),
             )
+            Spacer(GlanceModifier.defaultWeight())
+            val sessions = s.sessionsLeft
+            if (sessions != null && sessions.isFinite() && sessions >= 0f) {
+                Text(
+                    formatSessionsLeft(sessions),
+                    style = TextStyle(
+                        color = GlanceTheme.colors.onSurfaceVariant,
+                        fontSize = 9.sp,
+                    ),
+                    maxLines = 1,
+                )
+            }
         }
         Spacer(GlanceModifier.height(8.dp))
         FiveHourRow(
@@ -205,6 +219,10 @@ private fun RateLine(rate: FiveHourRate?, stale: Boolean) {
 
 private fun formatRate(rate: Float): String =
     if (rate < 10f) String.format(Locale.US, "%.1f", rate) else rate.roundToInt().toString()
+
+/** One decimal is the maximum display precision; never truncated or floored to Int. */
+private fun formatSessionsLeft(sessions: Float): String =
+    "≈" + String.format(Locale.US, "%.1f", sessions) + "×5H"
 
 @Composable
 internal fun MeterRow(
