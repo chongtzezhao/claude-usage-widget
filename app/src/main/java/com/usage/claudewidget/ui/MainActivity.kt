@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.usage.claudewidget.auth.LoginActivity
 import com.usage.claudewidget.data.CodexUsageRepository
+import com.usage.claudewidget.data.CookieHarvester
 import com.usage.claudewidget.data.FetchResult
 import com.usage.claudewidget.data.Provider
 import com.usage.claudewidget.data.Storage
@@ -40,6 +41,7 @@ import com.usage.claudewidget.data.UsageRepository
 import com.usage.claudewidget.widget.CodexWidget
 import com.usage.claudewidget.widget.TimeFmt
 import com.usage.claudewidget.widget.UsageWidget
+import com.usage.claudewidget.work.RefreshScheduler
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -105,6 +107,19 @@ private fun ProviderSection(provider: Provider) {
                 else -> "Re-sign in"
             }
         )
+    }
+
+    if (storage.isLoggedIn) {
+        OutlinedButton(onClick = {
+            scope.launch {
+                CookieHarvester.clear(provider)
+                RefreshScheduler.cancel(context, provider)
+                storage.signOut()
+                updateWidget(context, provider)
+                status = describe(storage, provider)
+                debug = ""
+            }
+        }) { Text("Sign out") }
     }
 
     OutlinedButton(onClick = {

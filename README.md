@@ -39,7 +39,7 @@ Then continue with first-run setup below.
 
 ## 👋 First-run setup
 
-1. Open the **Claude & Codex Usage** app. Sign in to **Claude** and/or **ChatGPT/Codex** — each has its own button and its own session.
+1. Open the **Claude & Codex Usage** app. Sign in to **Claude** and/or **ChatGPT/Codex** — each has its own button and its own session. To switch accounts or retry, tap **Sign out** under that provider; the next sign-in starts from a clean WebView session, so an expired server-side cookie can't be mistaken for a live one.
    - Claude: complete the normal `claude.ai` login in the WebView; it closes automatically once it captures your session.
    - Codex: sign in at `chatgpt.com` with **email + password** (Google sign-in is blocked inside embedded WebViews). The session cookie is captured automatically.
 2. Tap **Test fetch now** under each provider to confirm it prints your current percentages. These should match `claude.ai/settings/usage` and the Codex usage page.

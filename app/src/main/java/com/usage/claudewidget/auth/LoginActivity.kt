@@ -14,9 +14,12 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.Toast
+import com.usage.claudewidget.data.CodexUsageRepository
 import com.usage.claudewidget.data.CookieHarvester
+import com.usage.claudewidget.data.FetchResult
 import com.usage.claudewidget.data.Provider
 import com.usage.claudewidget.data.Storage
+import com.usage.claudewidget.data.UsageRepository
 import com.usage.claudewidget.widget.CodexWidget
 import com.usage.claudewidget.widget.UsageWidget
 import com.usage.claudewidget.work.RefreshScheduler
@@ -50,6 +53,9 @@ class LoginActivity : Activity() {
 
         val cm = CookieManager.getInstance()
         cm.setAcceptCookie(true)
+        // Start from a clean jar: a dead-but-unexpired session cookie would otherwise
+        // satisfy the capture check and look like a successful sign-in.
+        CookieHarvester.clear(provider)
 
         content = FrameLayout(this)
         webView = createWebView()
@@ -138,10 +144,29 @@ class LoginActivity : Activity() {
             return
         }
 
-        // Discover the first snapshot, then schedule periodic refresh.
+        // Validate the harvested session before finishing; a stale cookie that the
+        // server rejects must not masquerade as a completed sign-in.
         CoroutineScope(Dispatchers.Main).launch {
+            val result = when (provider) {
+                Provider.CLAUDE -> UsageRepository(this@LoginActivity).refresh()
+                Provider.CODEX -> CodexUsageRepository(this@LoginActivity).refresh()
+            }
+
+            if (result is FetchResult.NeedsLogin) {
+                // Drop the rejected cookie so the retry starts clean, then keep polling.
+                CookieHarvester.clear(provider)
+                captured = false
+                Toast.makeText(
+                    this@LoginActivity,
+                    "Sign-in was not accepted. Please try again.",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                webView.loadUrl(provider.loginUrl)
+                handler.postDelayed(captureSession, 500)
+                return@launch
+            }
+
             RefreshScheduler.ensurePeriodic(this@LoginActivity, provider)
-            RefreshScheduler.refreshNow(this@LoginActivity, provider)
             updateWidgets(this@LoginActivity)
             Toast.makeText(this@LoginActivity, "Signed in", Toast.LENGTH_SHORT).show()
             setResult(Activity.RESULT_OK)
