@@ -44,4 +44,11 @@ object RefreshScheduler {
             provider.workNameNow, ExistingWorkPolicy.REPLACE, work
         )
     }
+
+    /** Stops the provider's periodic and one-shot refresh work (sign-out). */
+    fun cancel(context: Context, provider: Provider = Provider.CLAUDE) {
+        val wm = WorkManager.getInstance(context)
+        wm.cancelUniqueWork(provider.workName)
+        wm.cancelUniqueWork(provider.workNameNow)
+    }
 }

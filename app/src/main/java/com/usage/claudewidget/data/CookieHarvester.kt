@@ -20,6 +20,11 @@ object CookieHarvester {
             cookie.startsWith("$name=") || cookie.startsWith("$name.")
         }
 
+    /** Removes the provider's WebView cookies so sign-in starts from a clean jar. */
+    fun clear(provider: Provider) {
+        // Implemented by the auth slice.
+    }
+
     /** Codex has rotated its session-cookie name across Auth.js versions. */
     fun hasProviderSession(raw: String, provider: Provider): Boolean = when (provider) {
         Provider.CLAUDE -> hasSessionCookie(raw, provider.sessionCookie)

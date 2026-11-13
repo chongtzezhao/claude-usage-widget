@@ -56,6 +56,13 @@ class Storage private constructor(
             .apply()
     }
 
+    /** Full sign-out: credentials, history/calibration and the on-widget snapshot. */
+    @Synchronized
+    fun signOut() {
+        clearCredentials()
+        snapshot.edit().clear().apply()
+    }
+
     // ---- usage snapshot (plain, read by the widget) ----
     var fiveHourUtil: Float
         get() = snapshot.getFloat("fh_util", -1f)
