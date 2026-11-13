@@ -58,8 +58,9 @@ class LoginActivity : Activity() {
 
         val cm = CookieManager.getInstance()
         cm.setAcceptCookie(true)
-        // A sign-in is a fresh start: drop stale credentials, history and the
-        // previous account's org id so a dead cookie cannot validate against them.
+        // A sign-in is a fresh start: drop stale credentials and the previous
+        // account's org id so a dead cookie cannot validate against them. The
+        // calibration ratio is plan-level, so it survives a re-login.
         // On a configuration change keep the in-progress jar instead.
         val firstCreate = savedInstanceState == null
         if (firstCreate) storage.signOut()

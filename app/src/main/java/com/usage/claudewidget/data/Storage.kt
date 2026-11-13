@@ -48,12 +48,6 @@ class Storage private constructor(
 
     fun clearCredentials() {
         secure.edit().clear().apply()
-        // A different account must not inherit this account's calibration.
-        snapshot.edit()
-            .remove("usage_history")
-            .remove("sessions_c")
-            .remove("sessions_n")
-            .apply()
     }
 
     /** Removes just the provider session, keeping the snapshot for diagnostics. */
@@ -72,12 +66,28 @@ class Storage private constructor(
      */
     val sessionEpoch: Long get() = snapshot.getLong("session_epoch", 0L)
 
-    /** Full sign-out: credentials, history/calibration and the on-widget snapshot. */
+    /**
+     * Full sign-out: credentials and the on-widget snapshot, but not the
+     * calibration. A fully-used 5H session always consumes the plan's
+     * 5H-to-weekly allowance ratio, independent of account or model mix, so
+     * the EWMA and its history survive a re-login.
+     */
     @Synchronized
     fun signOut() {
         val next = sessionEpoch + 1
         clearCredentials()
-        snapshot.edit().clear().putLong("session_epoch", next).apply()
+        snapshot.edit()
+            .remove("fh_util")
+            .remove("fh_reset")
+            .remove("wk_util")
+            .remove("wk_reset")
+            .remove("plan_type")
+            .remove("fetched_at")
+            .remove("auth_state")
+            .remove("fh_samples")
+            .remove("fh_samples_reset")
+            .putLong("session_epoch", next)
+            .apply()
     }
 
     // ---- usage snapshot (plain, read by the widget) ----
