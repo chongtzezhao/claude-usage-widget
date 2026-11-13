@@ -151,6 +151,14 @@ class Storage private constructor(
     val fiveHourMissing: Boolean get() = fiveHourUtil < 0f
     val sevenDayMissing: Boolean get() = sevenDayUtil < 0f
 
+    /**
+     * Estimated number of fully-used 5H sessions the remaining weekly quota
+     * covers, based on the recorded history. Full float precision; formatting
+     * belongs to the UI. Null until calibration exists or when the weekly
+     * window is unknown or already reset.
+     */
+    fun remainingFullSessions(now: Long = System.currentTimeMillis()): Float? = null
+
     fun saveSnapshot(s: UsageSnapshot) {
         recordFiveHourSample(
             s.fetchedAtEpochMs,
