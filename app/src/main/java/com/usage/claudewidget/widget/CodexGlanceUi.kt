@@ -21,6 +21,7 @@ import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
@@ -84,7 +85,10 @@ fun CodexWidgetContent(state: CodexWidgetState) {
 @Composable
 private fun CodexFullLayout(s: CodexWidgetState) {
     Column(modifier = GlanceModifier.fillMaxSize()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = GlanceModifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             CodexGlyph(22.dp)
             Spacer(GlanceModifier.width(6.dp))
             Text(
@@ -108,6 +112,8 @@ private fun CodexFullLayout(s: CodexWidgetState) {
                         ),
                         maxLines = 1,
                     )
+                    // Keep clear of the stale dot in the corner.
+                    Spacer(GlanceModifier.width(10.dp))
                 }
             }
         }

@@ -93,7 +93,10 @@ fun UsageWidgetContent(state: WidgetState) {
 @Composable
 private fun FullLayout(s: WidgetState) {
     Column(modifier = GlanceModifier.fillMaxSize()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = GlanceModifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Lobster(22.dp)
             Spacer(GlanceModifier.width(6.dp))
             Text(
@@ -115,6 +118,8 @@ private fun FullLayout(s: WidgetState) {
                     ),
                     maxLines = 1,
                 )
+                // Keep clear of the stale dot in the corner.
+                Spacer(GlanceModifier.width(10.dp))
             }
         }
         Spacer(GlanceModifier.height(8.dp))

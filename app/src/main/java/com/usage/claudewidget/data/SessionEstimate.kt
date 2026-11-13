@@ -51,7 +51,7 @@ object SessionEstimate {
     /**
      * A window's last reading must be this close to the 5H reset. WorkManager
      * batches refreshes to roughly hourly, so the last reading of a window can
-     * legitimately be up to an hour before the reset.
+     * legitimately be up to ~90 minutes before the reset.
      */
     const val RESET_SLACK_MS = 90 * 60 * 1000L
 
@@ -101,8 +101,10 @@ object SessionEstimate {
         val first = window.first()
         val last = window.last()
         if (first.fiveHourResetMs <= 0L) return null
-        // Mixed resets mean the list is not one window; never calibrate from it.
-        if (window.any { !sameWindow(it.fiveHourResetMs, first.fiveHourResetMs) }) return null
+        // The endpoints define the deltas, so they must describe one window.
+        // Comparing them directly (rather than every record to the first) also
+        // tolerates drift accumulating across the window's readings.
+        if (!sameWindow(first.fiveHourResetMs, last.fiveHourResetMs)) return null
         // A weekly reset inside the window makes the weekly delta meaningless.
         if (window.any { !sameWindow(it.weekResetMs, first.weekResetMs) }) return null
         if (first.fiveHourPct < 0f || last.fiveHourPct < 0f) return null

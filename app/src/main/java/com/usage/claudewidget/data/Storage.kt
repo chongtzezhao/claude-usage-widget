@@ -151,7 +151,7 @@ class Storage private constructor(
     private fun encodeFiveHourSamples(samples: List<FiveHourSample>): String =
         samples.joinToString(";") { "${it.atEpochMs}:${it.pct}" }
 
-    /** Rolling history of successful Claude snapshots, oldest first. */
+    /** Rolling history of successful snapshots, oldest first (one file per provider). */
     @Synchronized
     fun usageHistory(): List<UsageRecord> =
         SessionEstimate.decodeHistory(snapshot.getString("usage_history", "").orEmpty())
@@ -228,6 +228,7 @@ class Storage private constructor(
     fun remainingFullSessions(now: Long = System.currentTimeMillis()): Float? =
         SessionEstimate.remainingFullSessions(calibration(), sevenDayUtil, sevenDayReset, now)
 
+    @Synchronized
     fun saveSnapshot(s: UsageSnapshot) {
         recordFiveHourSample(
             s.fetchedAtEpochMs,
@@ -262,8 +263,22 @@ class Storage private constructor(
      * 5H-only plans record nothing: a weekly delta is meaningless without a
      * matching 5H window. The history shares the snapshot editor so the
      * record commits atomically with the values the widget renders.
+     *
+     * A plan or window-length change starts the calibration over: the stored
+     * points-per-session belong to the old plan's allowance units.
      */
+    @Synchronized
     fun saveCodexSnapshot(s: CodexSnapshot) {
+        val planChanged =
+            (s.planType.isNotBlank() && planType.isNotBlank() && s.planType != planType) ||
+                s.weeklyWindowSeconds != weeklyWindowSeconds
+        if (planChanged) {
+            snapshot.edit()
+                .remove("usage_history")
+                .remove("sessions_c")
+                .remove("sessions_n")
+                .apply()
+        }
         val five = s.fiveHour
         if (five != null) {
             recordFiveHourSample(s.fetchedAtEpochMs, five.utilization, five.resetsAtEpochMs)
