@@ -43,6 +43,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Shipped APK stays debuggable on purpose: run-as/backup access to
+            // the snapshot prefs is needed for support and on-device checks.
+            isDebuggable = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
