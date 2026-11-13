@@ -30,19 +30,54 @@ data class SessionCalibration(
  * that figure and clamps it by the time left in the week.
  */
 object SessionEstimate {
-    /** Newest records kept in the rolling usage history. */
-    const val HISTORY_LIMIT = 1000
+    /** Newest records kept in the rolling usage history (~7 days at 15 minutes). */
+    const val HISTORY_LIMIT = 700
+
+    /** Ignore refreshes this soon after the previous record in the same 5H window. */
+    const val MIN_RECORD_GAP_MS = 5 * 60 * 1000L
 
     /** Weight of the newest window sample. */
     const val ALPHA = 0.2f
 
     /** Below this much 5H progress a window is too quiet to calibrate from. */
-    const val MIN_FIVE_HOUR_DELTA = 1.0f
+    const val MIN_FIVE_HOUR_DELTA = 10.0f
+
+    /** One 5H session cannot consume more than the whole weekly quota. */
+    const val MAX_POINTS_PER_SESSION = 100f
 
     /** A window's last reading must be this close to the 5H reset. */
     const val RESET_SLACK_MS = 45 * 60 * 1000L
 
     const val FIVE_HOUR_MS = 5 * 60 * 60 * 1000L
+
+    /** A record with unknown resets or non-finite/negative percentages is unusable. */
+    fun isUsableRecord(record: UsageRecord): Boolean =
+        record.atEpochMs > 0L &&
+            record.fiveHourResetMs > 0L &&
+            record.weekResetMs > 0L &&
+            record.fiveHourPct.isFinite() &&
+            record.weekPct.isFinite() &&
+            record.fiveHourPct >= 0f &&
+            record.weekPct >= 0f
+
+    /** `at:fh:fhReset:wk:wkReset`; Float.toString round-trips the stored precision. */
+    fun encodeHistory(records: List<UsageRecord>): String =
+        records.joinToString(";") {
+            "${it.atEpochMs}:${it.fiveHourPct}:${it.fiveHourResetMs}:${it.weekPct}:${it.weekResetMs}"
+        }
+
+    fun decodeHistory(raw: String): List<UsageRecord> =
+        raw.split(';').mapNotNull { entry ->
+            val f = entry.split(':')
+            val at = f.getOrNull(0)?.toLongOrNull()
+            val fh = f.getOrNull(1)?.toFloatOrNull()
+            val fhReset = f.getOrNull(2)?.toLongOrNull()
+            val wk = f.getOrNull(3)?.toFloatOrNull()
+            val wkReset = f.getOrNull(4)?.toLongOrNull()
+            if (at != null && fh != null && fhReset != null && wk != null && wkReset != null) {
+                UsageRecord(at, fh, fhReset, wk, wkReset)
+            } else null
+        }.takeLast(HISTORY_LIMIT)
 
     /**
      * The calibration sample one closed 5H window yields, or null when the
@@ -52,28 +87,43 @@ object SessionEstimate {
         if (window.size < 2) return null
         val first = window.first()
         val last = window.last()
+        if (first.fiveHourResetMs <= 0L) return null
+        // Mixed resets mean the list is not one window; never calibrate from it.
+        if (window.any { it.fiveHourResetMs != first.fiveHourResetMs }) return null
         // A weekly reset inside the window makes the weekly delta meaningless.
         if (window.any { it.weekResetMs != first.weekResetMs }) return null
+        if (first.fiveHourPct < 0f || last.fiveHourPct < 0f) return null
         if (first.weekPct < 0f || last.weekPct < 0f) return null
-        if (first.fiveHourResetMs - last.atEpochMs > RESET_SLACK_MS) return null
+        if (!first.fiveHourPct.isFinite() || !last.fiveHourPct.isFinite()) return null
+        if (!first.weekPct.isFinite() || !last.weekPct.isFinite()) return null
+        if (last.fiveHourResetMs - last.atEpochMs > RESET_SLACK_MS) return null
 
         val dFive = last.fiveHourPct - first.fiveHourPct
         val dWeek = last.weekPct - first.weekPct
-        if (dFive <= MIN_FIVE_HOUR_DELTA || dWeek <= 0f) return null
+        if (!dFive.isFinite() || dFive <= MIN_FIVE_HOUR_DELTA) return null
+        if (!dWeek.isFinite() || dWeek <= 0f) return null
 
-        return 100f * dWeek / dFive
+        val sample = 100f * dWeek / dFive
+        if (!sample.isFinite() || sample <= 0f || sample > MAX_POINTS_PER_SESSION) return null
+        return sample
     }
 
-    /** Folds one window sample into the EWMA; the first sample initialises it. */
-    fun fold(previous: SessionCalibration?, sample: Float): SessionCalibration =
-        if (previous == null || previous.samples <= 0) {
-            SessionCalibration(sample, 1)
-        } else {
-            SessionCalibration(
-                ALPHA * sample + (1f - ALPHA) * previous.pointsPerSession,
-                previous.samples + 1,
-            )
+    /**
+     * Folds one window sample into the EWMA; the first valid sample initialises
+     * it. An invalid sample leaves the calibration untouched.
+     */
+    fun fold(previous: SessionCalibration?, sample: Float): SessionCalibration? {
+        if (!sample.isFinite() || sample <= 0f || sample > MAX_POINTS_PER_SESSION) {
+            return previous
         }
+        if (previous == null || previous.samples <= 0 || !previous.pointsPerSession.isFinite()) {
+            return SessionCalibration(sample, 1)
+        }
+        return SessionCalibration(
+            ALPHA * sample + (1f - ALPHA) * previous.pointsPerSession,
+            previous.samples + 1,
+        )
+    }
 
     /**
      * Remaining full sessions at [now], limited by both the weekly quota and the
@@ -89,10 +139,11 @@ object SessionEstimate {
         if (calibration == null || calibration.samples <= 0) return null
         val perSession = calibration.pointsPerSession
         if (!perSession.isFinite() || perSession <= 0f) return null
-        if (sevenDayPct < 0f || sevenDayResetMs <= now) return null
+        if (!sevenDayPct.isFinite() || sevenDayPct < 0f || sevenDayResetMs <= now) return null
 
         val remaining = (100f - sevenDayPct).coerceAtLeast(0f)
         val quotaSessions = remaining / perSession
+        // Time bound credits the current partial window; it is a cap, not a floor.
         val timeSessions = (sevenDayResetMs - now) / FIVE_HOUR_MS.toFloat()
         return minOf(quotaSessions, timeSessions)
     }

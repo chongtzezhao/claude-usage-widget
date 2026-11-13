@@ -48,6 +48,12 @@ class Storage private constructor(
 
     fun clearCredentials() {
         secure.edit().clear().apply()
+        // A different account must not inherit this account's calibration.
+        snapshot.edit()
+            .remove("usage_history")
+            .remove("sessions_c")
+            .remove("sessions_n")
+            .apply()
     }
 
     // ---- usage snapshot (plain, read by the widget) ----
@@ -148,54 +154,49 @@ class Storage private constructor(
     /** Rolling history of successful Claude snapshots, oldest first. */
     @Synchronized
     fun usageHistory(): List<UsageRecord> =
-        decodeUsageHistory(snapshot.getString("usage_history", "").orEmpty())
+        SessionEstimate.decodeHistory(snapshot.getString("usage_history", "").orEmpty())
 
     /**
-     * Appends a record. A changed 5H reset closes the previous window, whose
-     * calibration sample is folded into the stored EWMA when it carries signal.
+     * Appends a usable record to [editor]. A changed 5H reset closes the
+     * previous window, whose calibration sample is folded into the stored EWMA
+     * when it carries signal. Records with unknown resets or bad numbers, and
+     * refreshes less than [SessionEstimate.MIN_RECORD_GAP_MS] into the same
+     * window, are ignored so bursts cannot manufacture tiny windows.
      */
     @Synchronized
-    fun recordUsage(record: UsageRecord) {
+    private fun appendUsage(editor: SharedPreferences.Editor, record: UsageRecord) {
+        if (!SessionEstimate.isUsableRecord(record)) return
         val history = usageHistory()
-        val closed = history.lastOrNull()?.let { last ->
-            if (last.fiveHourResetMs == record.fiveHourResetMs) return@let null
+        val last = history.lastOrNull()
+        if (last != null) {
+            if (record.atEpochMs <= last.atEpochMs) return
+            if (record.fiveHourResetMs == last.fiveHourResetMs &&
+                record.atEpochMs - last.atEpochMs < SessionEstimate.MIN_RECORD_GAP_MS
+            ) {
+                return
+            }
+        }
+
+        val closed = last?.let {
+            if (it.fiveHourResetMs == record.fiveHourResetMs) return@let null
             SessionEstimate.windowSample(
-                history.takeLastWhile { it.fiveHourResetMs == last.fiveHourResetMs }
+                history.takeLastWhile { r -> r.fiveHourResetMs == it.fiveHourResetMs }
             )
         }
 
         val calibration = closed?.let { SessionEstimate.fold(calibration(), it) }
-        val editor = snapshot.edit()
-            .putString(
-                "usage_history",
-                encodeUsageHistory((history + record).takeLast(SessionEstimate.HISTORY_LIMIT)),
-            )
+        editor.putString(
+            "usage_history",
+            SessionEstimate.encodeHistory(
+                (history + record).takeLast(SessionEstimate.HISTORY_LIMIT)
+            ),
+        )
         if (calibration != null) {
             editor
                 .putFloat("sessions_c", calibration.pointsPerSession)
                 .putInt("sessions_n", calibration.samples)
         }
-        editor.apply()
     }
-
-    /** `at:fh:fhReset:wk:wkReset` per entry; floats keep full precision. */
-    private fun decodeUsageHistory(raw: String): List<UsageRecord> =
-        raw.split(';').mapNotNull { entry ->
-            val f = entry.split(':')
-            val at = f.getOrNull(0)?.toLongOrNull()
-            val fh = f.getOrNull(1)?.toFloatOrNull()
-            val fhReset = f.getOrNull(2)?.toLongOrNull()
-            val wk = f.getOrNull(3)?.toFloatOrNull()
-            val wkReset = f.getOrNull(4)?.toLongOrNull()
-            if (at != null && fh != null && fhReset != null && wk != null && wkReset != null) {
-                UsageRecord(at, fh, fhReset, wk, wkReset)
-            } else null
-        }.takeLast(SessionEstimate.HISTORY_LIMIT)
-
-    private fun encodeUsageHistory(records: List<UsageRecord>): String =
-        records.joinToString(";") {
-            "${it.atEpochMs}:${it.fiveHourPct}:${it.fiveHourResetMs}:${it.weekPct}:${it.weekResetMs}"
-        }
 
     /** Stored EWMA; null while no window has been calibrated yet. */
     private fun calibration(): SessionCalibration? {
@@ -226,16 +227,19 @@ class Storage private constructor(
             s.fiveHour.utilization,
             s.fiveHour.resetsAtEpochMs,
         )
-        recordUsage(
+        // One editor: history, calibration and the snapshot commit atomically.
+        val editor = snapshot.edit()
+        appendUsage(
+            editor,
             UsageRecord(
                 atEpochMs = s.fetchedAtEpochMs,
                 fiveHourPct = s.fiveHour.utilization,
                 fiveHourResetMs = s.fiveHour.resetsAtEpochMs,
                 weekPct = s.sevenDay.utilization,
                 weekResetMs = s.sevenDay.resetsAtEpochMs,
-            )
+            ),
         )
-        snapshot.edit()
+        editor
             .putFloat("fh_util", s.fiveHour.utilization)
             .putLong("fh_reset", s.fiveHour.resetsAtEpochMs)
             .putFloat("wk_util", s.sevenDay.utilization)

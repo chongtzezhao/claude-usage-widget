@@ -102,6 +102,7 @@ private fun FullLayout(s: WidgetState) {
                     color = GlanceTheme.colors.onSurface,
                     fontWeight = FontWeight.Medium,
                 ),
+                maxLines = 1,
             )
             Spacer(GlanceModifier.defaultWeight())
             val sessions = s.sessionsLeft
@@ -110,7 +111,7 @@ private fun FullLayout(s: WidgetState) {
                     formatSessionsLeft(sessions),
                     style = TextStyle(
                         color = GlanceTheme.colors.onSurfaceVariant,
-                        fontSize = 9.sp,
+                        fontSize = 8.sp,
                     ),
                     maxLines = 1,
                 )

@@ -1,7 +1,9 @@
 package com.usage.claudewidget.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SessionEstimateTest {
@@ -26,16 +28,33 @@ class SessionEstimateTest {
 
     @Test
     fun firstSampleInitialisesTheEwma() {
-        val calibration = SessionEstimate.fold(null, 40f)
+        val calibration = SessionEstimate.fold(null, 40f)!!
         assertEquals(40f, calibration.pointsPerSession, 0f)
         assertEquals(1, calibration.samples)
     }
 
     @Test
     fun laterSamplesAreWeightedByAlpha() {
-        val calibration = SessionEstimate.fold(SessionCalibration(20f, 3), 30f)
+        val calibration = SessionEstimate.fold(SessionCalibration(20f, 3), 30f)!!
         assertEquals(0.2f * 30f + 0.8f * 20f, calibration.pointsPerSession, 0.0001f)
         assertEquals(4, calibration.samples)
+    }
+
+    @Test
+    fun invalidSamplesLeaveTheEwmaUntouched() {
+        val previous = SessionCalibration(20f, 3)
+        assertEquals(previous, SessionEstimate.fold(previous, Float.NaN))
+        assertEquals(previous, SessionEstimate.fold(previous, 0f))
+        assertEquals(previous, SessionEstimate.fold(previous, -1f))
+        assertEquals(previous, SessionEstimate.fold(previous, 100.5f))
+        assertNull(SessionEstimate.fold(null, Float.NaN))
+    }
+
+    @Test
+    fun aPoisonedEwmaRecoversOnTheNextValidSample() {
+        val calibration = SessionEstimate.fold(SessionCalibration(Float.NaN, 3), 40f)!!
+        assertEquals(40f, calibration.pointsPerSession, 0f)
+        assertEquals(1, calibration.samples)
     }
 
     // ---- window calibration ----
@@ -61,7 +80,7 @@ class SessionEstimateTest {
         )
 
         assertEquals(7.25f, SessionEstimate.windowSample(window)!!, 0f)
-        assertEquals(7.25f, SessionEstimate.fold(null, 7.25f).pointsPerSession, 0f)
+        assertEquals(7.25f, SessionEstimate.fold(null, 7.25f)!!.pointsPerSession, 0f)
     }
 
     @Test
@@ -236,5 +255,102 @@ class SessionEstimateTest {
         )
 
         assertEquals(2.4f, estimate!!, 0.0001f)
+    }
+
+    @Test
+    fun nanInputsAreSkipped() {
+        val nanFive = listOf(
+            record(reset5 - fifteenMin, Float.NaN, 10f),
+            record(reset5, 50f, 22f),
+        )
+        val nanWeek = listOf(
+            record(reset5 - fifteenMin, 20f, Float.NaN),
+            record(reset5, 50f, 22f),
+        )
+
+        assertNull(SessionEstimate.windowSample(nanFive))
+        assertNull(SessionEstimate.windowSample(nanWeek))
+    }
+
+    @Test
+    fun impossibleSamplesAreSkipped() {
+        // 11 points of 5H progress cannot move the week 12 points.
+        val window = listOf(
+            record(reset5 - fifteenMin, 20f, 10f),
+            record(reset5, 31f, 22f),
+        )
+
+        assertNull(SessionEstimate.windowSample(window))
+    }
+
+    @Test
+    fun windowsWithUnknownOrMixedResetsAreSkipped() {
+        val unknownReset = listOf(
+            record(reset5 - fifteenMin, 20f, 10f, fiveReset = 0L),
+            record(reset5, 50f, 22f, fiveReset = 0L),
+        )
+        val mixedReset = listOf(
+            record(reset5 - fifteenMin, 20f, 10f),
+            record(reset5, 50f, 22f, fiveReset = reset5 + fiveHour),
+        )
+
+        assertNull(SessionEstimate.windowSample(unknownReset))
+        assertNull(SessionEstimate.windowSample(mixedReset))
+    }
+
+    @Test
+    fun unusableRecordsAreRejected() {
+        assertTrue(SessionEstimate.isUsableRecord(record(reset5, 50f, 22f)))
+        assertFalse(SessionEstimate.isUsableRecord(record(reset5, 50f, 22f).copy(atEpochMs = 0L)))
+        assertFalse(SessionEstimate.isUsableRecord(record(reset5, 50f, 22f).copy(fiveHourResetMs = 0L)))
+        assertFalse(SessionEstimate.isUsableRecord(record(reset5, 50f, 22f).copy(weekResetMs = 0L)))
+        assertFalse(SessionEstimate.isUsableRecord(record(reset5, -1f, 22f)))
+        assertFalse(SessionEstimate.isUsableRecord(record(reset5, 50f, -1f)))
+        assertFalse(SessionEstimate.isUsableRecord(record(reset5, Float.NaN, 22f)))
+        assertFalse(SessionEstimate.isUsableRecord(record(reset5, 50f, Float.NaN)))
+    }
+
+    @Test
+    fun nanWeeklyUsageMeansNoEstimate() {
+        assertNull(
+            SessionEstimate.remainingFullSessions(
+                SessionCalibration(20f, 2),
+                Float.NaN,
+                weekReset,
+                start,
+            )
+        )
+    }
+
+    // ---- history codec ----
+
+    @Test
+    fun historyCodecRoundTripsFullPrecision() {
+        val records = listOf(
+            record(start, 12.345678f, 0.1f),
+            record(start + fifteenMin, 33.333332f, 7.25f),
+        )
+
+        assertEquals(records, SessionEstimate.decodeHistory(SessionEstimate.encodeHistory(records)))
+    }
+
+    @Test
+    fun malformedHistoryEntriesAreDropped() {
+        val decoded = SessionEstimate.decodeHistory("garbage;1:2:3:4:5;;9:8:7:6")
+
+        assertEquals(1, decoded.size)
+        assertEquals(UsageRecord(1L, 2f, 3L, 4f, 5L), decoded.first())
+    }
+
+    @Test
+    fun historyKeepsOnlyTheNewestEntries() {
+        val records = (0 until SessionEstimate.HISTORY_LIMIT + 5).map {
+            record(start + it * fifteenMin, it.toFloat(), it.toFloat())
+        }
+
+        val decoded = SessionEstimate.decodeHistory(SessionEstimate.encodeHistory(records))
+
+        assertEquals(SessionEstimate.HISTORY_LIMIT, decoded.size)
+        assertEquals(records[5], decoded.first())
     }
 }
