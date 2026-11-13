@@ -56,11 +56,28 @@ class Storage private constructor(
             .apply()
     }
 
+    /** Removes just the provider session, keeping the snapshot for diagnostics. */
+    fun clearSessionCookie() {
+        when (provider) {
+            Provider.CLAUDE -> sessionKey = null
+            Provider.CODEX -> chatGptCookie = null
+        }
+        orgId = null
+    }
+
+    /**
+     * Monotonic marker bumped by sign-out. A refresh that started before the
+     * sign-out compares it before writing, so a late worker cannot resurrect
+     * credentials or a snapshot for a signed-out provider.
+     */
+    val sessionEpoch: Long get() = snapshot.getLong("session_epoch", 0L)
+
     /** Full sign-out: credentials, history/calibration and the on-widget snapshot. */
     @Synchronized
     fun signOut() {
+        val next = sessionEpoch + 1
         clearCredentials()
-        snapshot.edit().clear().apply()
+        snapshot.edit().clear().putLong("session_epoch", next).apply()
     }
 
     // ---- usage snapshot (plain, read by the widget) ----

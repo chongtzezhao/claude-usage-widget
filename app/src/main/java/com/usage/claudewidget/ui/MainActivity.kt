@@ -88,10 +88,12 @@ private fun ProviderSection(provider: Provider) {
 
     var status by remember(provider) { mutableStateOf(describe(storage, provider)) }
     var debug by remember(provider) { mutableStateOf("") }
+    var loggedIn by remember(provider) { mutableStateOf(storage.isLoggedIn) }
 
     val loginLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
+        loggedIn = storage.isLoggedIn
         status = describe(storage, provider)
     }
 
@@ -101,21 +103,22 @@ private fun ProviderSection(provider: Provider) {
     Button(onClick = { loginLauncher.launch(LoginActivity.start(context, provider)) }) {
         Text(
             when {
-                !storage.isLoggedIn && provider == Provider.CODEX -> "Sign in to ChatGPT"
-                !storage.isLoggedIn -> "Sign in"
+                !loggedIn && provider == Provider.CODEX -> "Sign in to ChatGPT"
+                !loggedIn -> "Sign in"
                 provider == Provider.CODEX -> "Re-sign in to ChatGPT"
                 else -> "Re-sign in"
             }
         )
     }
 
-    if (storage.isLoggedIn) {
+    if (loggedIn) {
         OutlinedButton(onClick = {
             scope.launch {
-                CookieHarvester.clear(provider)
-                RefreshScheduler.cancel(context, provider)
                 storage.signOut()
+                RefreshScheduler.cancel(context, provider)
+                CookieHarvester.clear(provider)
                 updateWidget(context, provider)
+                loggedIn = storage.isLoggedIn
                 status = describe(storage, provider)
                 debug = ""
             }
@@ -148,6 +151,7 @@ private fun ProviderSection(provider: Provider) {
                 is FetchResult.NeedsLogin -> "Session expired. Sign in again."
                 is FetchResult.Soft -> "Transient: ${result.reason}"
             }
+            loggedIn = storage.isLoggedIn
             status = describe(storage, provider)
         }
     }) { Text("Test fetch now") }

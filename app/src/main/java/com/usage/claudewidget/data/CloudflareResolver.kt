@@ -22,9 +22,9 @@ object CloudflareResolver {
 
     /** @return true if a cf_clearance cookie was obtained and harvested into [storage]. */
     suspend fun resolve(context: Context, storage: Storage, timeoutMs: Long = 30_000): Boolean {
-        // Claude credentials live in encrypted prefs, so seed the jar before loading.
-        // Codex cookies are already in the WebView jar from the interactive login.
-        if (storage.provider == Provider.CLAUDE) seedSessionCookie(storage)
+        // Credentials live in encrypted prefs (or a jar that a sign-out may have
+        // wiped), so always seed the WebView jar before loading the challenge.
+        seedSessionCookie(storage)
 
         val ok = withTimeoutOrNull(timeoutMs) {
             runWebViewChallenge(context.applicationContext, storage)
@@ -34,13 +34,31 @@ object CloudflareResolver {
     }
 
     private fun seedSessionCookie(storage: Storage) {
-        val session = storage.sessionKey ?: return
         val cm = CookieManager.getInstance()
         cm.setAcceptCookie(true)
-        cm.setCookie(
-            storage.provider.base,
-            "${storage.provider.sessionCookie}=$session; Domain=.claude.ai; Path=/; Secure; HttpOnly",
-        )
+        when (storage.provider) {
+            Provider.CLAUDE -> {
+                val session = storage.sessionKey ?: return
+                cm.setCookie(
+                    storage.provider.base,
+                    "${storage.provider.sessionCookie}=$session; Domain=.claude.ai; Path=/; Secure; HttpOnly",
+                )
+            }
+            Provider.CODEX -> {
+                val raw = storage.chatGptCookie ?: return
+                // Replay the stored jar into the WebView so the challenge runs signed in.
+                // __Host- cookies reject a Domain attribute, so leave those out.
+                raw.split(';').forEach { part ->
+                    val name = part.substringBefore('=', "").trim()
+                    if (name.isEmpty() || name.startsWith("__Host-")) return@forEach
+                    val value = part.substringAfter('=', "").trim()
+                    cm.setCookie(
+                        storage.provider.base,
+                        "$name=$value; Domain=.chatgpt.com; Path=/; Secure",
+                    )
+                }
+            }
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")

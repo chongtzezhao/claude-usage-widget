@@ -29,10 +29,12 @@ class CodexUsageRepository(private val context: Context) {
 
     suspend fun refresh(): FetchResult = withContext(Dispatchers.IO) {
         if (!storage.isLoggedIn) return@withContext FetchResult.NeedsLogin
+        val epoch = storage.sessionEpoch
 
         // Prefer the live WebView jar: NextAuth rotates the session cookie, so the
         // copy saved at login can be older than the still-valid one on disk.
         CookieHarvester.harvest(storage)
+        if (storage.sessionEpoch != epoch) return@withContext FetchResult.NeedsLogin
         var cookie = storage.chatGptCookie ?: return@withContext FetchResult.NeedsLogin
 
         var result = fetchWithCookie(cookie)
@@ -56,6 +58,7 @@ class CodexUsageRepository(private val context: Context) {
             result = FetchResult.Soft("empty")
         }
 
+        if (storage.sessionEpoch != epoch) return@withContext FetchResult.Soft("signed-out")
         storage.authState =
             if (result is FetchResult.NeedsLogin) AuthState.NEEDS_LOGIN else AuthState.OK
         if (result is FetchResult.CodexSuccess) storage.saveCodexSnapshot(result.snapshot)

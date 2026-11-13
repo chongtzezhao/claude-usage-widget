@@ -21,48 +21,24 @@ object CookieHarvester {
         }
 
     /**
-     * Removes the provider's WebView cookies so sign-in starts from a clean jar.
+     * Removes the WebView cookie jar so sign-in starts from a clean session.
      *
-     * Must be safe on the main thread before a WebView is created: [CookieManager]
-     * is a process-wide singleton and this only issues synchronous jar writes.
+     * Name-based expiry cannot match Domain- or path-scoped cookies (the jar
+     * keys them separately), so this clears the whole jar: a clean sign-in
+     * beats a half-cleared one. Callers on a screen that must wait before
+     * loading a URL can use [onDone]; it runs after the asynchronous removal.
      */
-    fun clear(provider: Provider) {
-        val cookies = CookieManager.getInstance()
-        // Rebuild nothing: an expired cookie only needs its name.
-        for (origin in origins(provider)) {
-            for (name in cookieNames(cookies.getCookie(origin).orEmpty())) {
-                cookies.setCookie(origin, "$name=; Max-Age=0; Path=/; Secure")
+    fun clear(provider: Provider, onDone: (() -> Unit)? = null) {
+        val cm = CookieManager.getInstance()
+        if (onDone == null) {
+            cm.removeAllCookies(null)
+            cm.flush()
+        } else {
+            cm.removeAllCookies {
+                cm.flush()
+                onDone()
             }
         }
-        cookies.flush()
-
-        // Expiring names can miss cookies the jar still replays under a rotated or
-        // host-only name (Auth.js has used several). A leftover session would let
-        // the login screen's capture loop harvest a stale session again, so drop the
-        // whole jar as a last resort: a clean sign-in beats a half-cleared one.
-        if (hasProviderSession(cookies.getCookie(provider.base).orEmpty(), provider)) {
-            cookies.removeAllCookies(null)
-            cookies.flush()
-        }
-    }
-
-    /** Cookie names in a `name=value; name=value` jar string; values are ignored. */
-    fun cookieNames(raw: String): List<String> =
-        raw.split(';')
-            .mapNotNull { part ->
-                val end = part.indexOf('=')
-                if (end <= 0) null else part.substring(0, end).trim().takeIf { it.isNotEmpty() }
-            }
-            .distinct()
-
-    private fun origins(provider: Provider): List<String> = when (provider) {
-        Provider.CLAUDE -> listOf(Provider.CLAUDE.base)
-        Provider.CODEX -> listOf(
-            Provider.CODEX.base,
-            "https://auth.openai.com",
-            "https://external.auth.openai.com",
-            "https://openai.com",
-        )
     }
 
     /** Codex has rotated its session-cookie name across Auth.js versions. */

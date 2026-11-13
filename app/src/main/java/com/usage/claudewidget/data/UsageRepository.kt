@@ -27,14 +27,16 @@ class UsageRepository(private val context: Context) {
 
     suspend fun refresh(): FetchResult = withContext(Dispatchers.IO) {
         if (!storage.isLoggedIn) return@withContext FetchResult.NeedsLogin
+        val epoch = storage.sessionEpoch
 
         // Make sure we know which org to query.
         val org = storage.orgId ?: when (val o = discoverOrg()) {
-            null -> return@withContext FetchResult.Soft("org-unknown")
-            else -> o.also { storage.orgId = it }
+            is OrgResult.Found -> o.id.also { storage.orgId = it }
+            OrgResult.NeedsLogin -> return@withContext FetchResult.NeedsLogin
+            OrgResult.Soft -> return@withContext FetchResult.Soft("org-unknown")
         }
 
-        when (val r = getUsage(org)) {
+        val result = when (val r = getUsage(org)) {
             is FetchResult.Soft -> {
                 // Could be an expired cf_clearance: try one silent WebView re-solve.
                 if (r.reason == "cloudflare") {
@@ -43,11 +45,12 @@ class UsageRepository(private val context: Context) {
                 } else r
             }
             else -> r
-        }.also { result ->
-            storage.authState =
-                if (result is FetchResult.NeedsLogin) AuthState.NEEDS_LOGIN else AuthState.OK
-            if (result is FetchResult.Success) storage.saveSnapshot(result.snapshot)
         }
+        if (storage.sessionEpoch != epoch) return@withContext FetchResult.Soft("signed-out")
+        storage.authState =
+            if (result is FetchResult.NeedsLogin) AuthState.NEEDS_LOGIN else AuthState.OK
+        if (result is FetchResult.Success) storage.saveSnapshot(result.snapshot)
+        result
     }
 
     private fun getUsage(org: String): FetchResult {
@@ -70,13 +73,20 @@ class UsageRepository(private val context: Context) {
         }
     }
 
-    private fun discoverOrg(): String? {
-        val req = buildRequest(Const.ORGS_URL) ?: return null
+    private sealed interface OrgResult {
+        data class Found(val id: String) : OrgResult
+        data object NeedsLogin : OrgResult
+        data object Soft : OrgResult
+    }
+
+    private fun discoverOrg(): OrgResult {
+        val req = buildRequest(Const.ORGS_URL) ?: return OrgResult.NeedsLogin
         return try {
             client.newCall(req).execute().use { resp ->
-                if (resp.code != 200) return null
+                if (resp.code == 401 || resp.isRedirect) return OrgResult.NeedsLogin
+                if (resp.code != 200) return OrgResult.Soft
                 val arr = JSONArray(resp.body?.string().orEmpty())
-                if (arr.length() == 0) return null
+                if (arr.length() == 0) return OrgResult.Soft
                 // Single-org accounts: take [0]. Multi-org: prefer one with a chat capability.
                 for (i in 0 until arr.length()) {
                     val o = arr.getJSONObject(i)
@@ -85,12 +95,16 @@ class UsageRepository(private val context: Context) {
                         caps.optString(it).contains("chat", true) ||
                             caps.optString(it).contains("claude_ai", true)
                     }
-                    if (isChat) return o.optString("uuid").ifBlank { o.optString("id") }
+                    if (isChat) {
+                        return OrgResult.Found(o.optString("uuid").ifBlank { o.optString("id") })
+                    }
                 }
-                arr.getJSONObject(0).let { it.optString("uuid").ifBlank { it.optString("id") } }
+                OrgResult.Found(
+                    arr.getJSONObject(0).let { it.optString("uuid").ifBlank { it.optString("id") } }
+                )
             }
         } catch (_: Exception) {
-            null
+            OrgResult.Soft
         }
     }
 

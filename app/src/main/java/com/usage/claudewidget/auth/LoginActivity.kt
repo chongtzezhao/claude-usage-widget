@@ -25,6 +25,7 @@ import com.usage.claudewidget.widget.UsageWidget
 import com.usage.claudewidget.work.RefreshScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 /**
@@ -39,9 +40,13 @@ class LoginActivity : Activity() {
     private val provider by lazy { Provider.fromName(intent.getStringExtra(EXTRA_PROVIDER)) }
     private val storage by lazy { Storage.get(this, provider) }
     private var captured = false
+    private var attempts = 0
+    private var jarReady = false
+    private var validationJob: Job? = null
     private val handler = Handler(Looper.getMainLooper())
     private val captureSession = object : Runnable {
         override fun run() {
+            if (isFinishing || isDestroyed || !jarReady) return
             tryCapture()
             if (!captured) handler.postDelayed(this, 500)
         }
@@ -53,9 +58,11 @@ class LoginActivity : Activity() {
 
         val cm = CookieManager.getInstance()
         cm.setAcceptCookie(true)
-        // Start from a clean jar: a dead-but-unexpired session cookie would otherwise
-        // satisfy the capture check and look like a successful sign-in.
-        CookieHarvester.clear(provider)
+        // A sign-in is a fresh start: drop stale credentials, history and the
+        // previous account's org id so a dead cookie cannot validate against them.
+        // On a configuration change keep the in-progress jar instead.
+        val firstCreate = savedInstanceState == null
+        if (firstCreate) storage.signOut()
 
         content = FrameLayout(this)
         webView = createWebView()
@@ -70,7 +77,22 @@ class LoginActivity : Activity() {
         storage.userAgent = webView.settings.userAgentString
         content.addView(webView)
         setContentView(content)
-        webView.loadUrl(provider.loginUrl)
+        // Load only once the stale jar is gone; a leftover session cookie would
+        // otherwise satisfy the capture check and look like a successful sign-in.
+        if (!firstCreate) {
+            jarReady = true
+            webView.loadUrl(provider.loginUrl)
+            handler.postDelayed(captureSession, 500)
+            return
+        }
+        CookieHarvester.clear(provider) {
+            handler.post {
+                if (isFinishing || isDestroyed) return@post
+                jarReady = true
+                webView.loadUrl(provider.loginUrl)
+                handler.postDelayed(captureSession, 500)
+            }
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -146,29 +168,53 @@ class LoginActivity : Activity() {
 
         // Validate the harvested session before finishing; a stale cookie that the
         // server rejects must not masquerade as a completed sign-in.
-        CoroutineScope(Dispatchers.Main).launch {
+        validationJob = CoroutineScope(Dispatchers.Main).launch {
             val result = when (provider) {
                 Provider.CLAUDE -> UsageRepository(this@LoginActivity).refresh()
                 Provider.CODEX -> CodexUsageRepository(this@LoginActivity).refresh()
             }
+            if (isFinishing || isDestroyed) return@launch
 
             if (result is FetchResult.NeedsLogin) {
-                // Drop the rejected cookie so the retry starts clean, then keep polling.
-                CookieHarvester.clear(provider)
-                captured = false
-                Toast.makeText(
-                    this@LoginActivity,
-                    "Sign-in was not accepted. Please try again.",
-                    Toast.LENGTH_SHORT,
-                ).show()
-                webView.loadUrl(provider.loginUrl)
-                handler.postDelayed(captureSession, 500)
+                storage.clearSessionCookie()
+                attempts++
+                if (attempts >= MAX_ATTEMPTS) {
+                    Toast.makeText(
+                        this@LoginActivity,
+                        "Sign-in failed. Go back and try again.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    setResult(Activity.RESULT_CANCELED)
+                    finish()
+                    return@launch
+                }
+                // Drop the rejected jar so the retry starts clean, then poll again
+                // only after the asynchronous removal has landed.
+                handler.removeCallbacks(captureSession)
+                CookieHarvester.clear(provider) {
+                    handler.post {
+                        if (isFinishing || isDestroyed) return@post
+                        captured = false
+                        Toast.makeText(
+                            this@LoginActivity,
+                            "Sign-in was not accepted. Please try again.",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                        webView.loadUrl(provider.loginUrl)
+                        handler.postDelayed(captureSession, 500)
+                    }
+                }
                 return@launch
             }
 
             RefreshScheduler.ensurePeriodic(this@LoginActivity, provider)
             updateWidgets(this@LoginActivity)
-            Toast.makeText(this@LoginActivity, "Signed in", Toast.LENGTH_SHORT).show()
+            val verified = result is FetchResult.Success || result is FetchResult.CodexSuccess
+            Toast.makeText(
+                this@LoginActivity,
+                if (verified) "Signed in" else "Signed in; will verify on refresh",
+                Toast.LENGTH_SHORT,
+            ).show()
             setResult(Activity.RESULT_OK)
             finish()
         }
@@ -182,6 +228,7 @@ class LoginActivity : Activity() {
     }
 
     override fun onDestroy() {
+        validationJob?.cancel()
         handler.removeCallbacks(captureSession)
         popupWebView?.destroy()
         if (::webView.isInitialized) webView.destroy()
@@ -190,6 +237,7 @@ class LoginActivity : Activity() {
 
     companion object {
         private const val EXTRA_PROVIDER = "provider"
+        private const val MAX_ATTEMPTS = 3
 
         fun start(context: Context, provider: Provider): Intent =
             Intent(context, LoginActivity::class.java)
